@@ -1,0 +1,28 @@
+{"level":"info","ts":"[2023-07-01 20:07:36.468]","caller":"gin@v1.9.1/context.go:174","msg":"Before request","requestError":"json: unsupported type: func() (io.ReadCloser, error)"}
+{"level":"info","ts":"[2023-07-01 20:07:36.468]","caller":"gin@v1.9.1/context.go:174","msg":"After request","request":400}
+{"level":"info","ts":"[2023-07-01 20:13:14.406]","caller":"gin@v1.9.1/context.go:174","msg":"Before request","requestError":"json: unsupported type: func() (io.ReadCloser, error)"}
+{"level":"info","ts":"[2023-07-01 20:17:54.220]","caller":"gin@v1.9.1/context.go:174","msg":"Before request","requestError":"json: unsupported type: func() (io.ReadCloser, error)"}
+{"level":"info","ts":"[2023-07-01 20:17:54.220]","caller":"gin@v1.9.1/context.go:174","msg":"After request","request":404}
+{"level":"info","ts":"[2023-07-01 20:18:21.362]","caller":"gin@v1.9.1/context.go:174","msg":"Before request, client IP : ::1%!(EXTRA zapcore.Field={request 23 0  0xc000102000})"}
+{"level":"info","ts":"[2023-07-01 20:18:21.363]","caller":"gin@v1.9.1/context.go:174","msg":"After request, client IP: ::1%!(EXTRA zapcore.Field={request 11 404  <nil>})"}
+{"level":"info","ts":"[2023-07-01 20:18:56.975]","caller":"gin@v1.9.1/context.go:174","msg":"Before request, client IP : ::1%!(EXTRA zapcore.Field={request 23 0  0xc000498200})"}
+{"level":"info","ts":"[2023-07-01 20:18:56.976]","caller":"gin@v1.9.1/context.go:174","msg":"After request, client IP: ::1%!(EXTRA zapcore.Field={request 11 404  <nil>})"}
+{"level":"info","ts":"[2023-07-01 20:19:05.674]","caller":"gin@v1.9.1/context.go:174","msg":"Before request, client IP : ::1%!(EXTRA zapcore.Field={request 23 0  0xc0003f0300})"}
+{"level":"info","ts":"[2023-07-01 20:19:05.676]","caller":"gin@v1.9.1/context.go:174","msg":"After request, client IP: ::1%!(EXTRA zapcore.Field={request 11 200  <nil>})"}
+{"level":"info","ts":"[2023-07-01 20:21:24.539]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc00007c400})"}
+{"level":"info","ts":"[2023-07-01 20:21:24.540]","caller":"gin@v1.9.1/context.go:174","msg":"After request %!(EXTRA zapcore.Field={request 11 200  <nil>})"}
+{"level":"info","ts":"[2023-07-01 20:21:35.495]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc00024c100})"}
+{"level":"info","ts":"[2023-07-01 20:27:39.276]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc0001d4100})"}
+{"level":"info","ts":"[2023-07-01 20:27:56.119]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000354300})"}
+{"level":"info","ts":"[2023-07-01 20:30:11.441]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000520000})"}
+{"level":"info","ts":"[2023-07-01 20:30:18.232]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000520100})"}
+{"level":"info","ts":"[2023-07-01 20:30:18.232]","caller":"gin@v1.9.1/context.go:174","msg":"After request %!(EXTRA zapcore.Field={request 11 404  <nil>})"}
+{"level":"info","ts":"[2023-07-01 20:30:32.545]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000520300})"}
+{"level":"info","ts":"[2023-07-01 20:30:32.548]","caller":"gin@v1.9.1/context.go:174","msg":"After request %!(EXTRA zapcore.Field={request 11 200  <nil>})"}
+{"level":"info","ts":"[2023-07-01 22:14:42.898]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc00063a200})"}
+{"level":"info","ts":"[2023-07-01 22:18:26.378]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000102000})"}
+{"level":"info","ts":"[2023-07-01 22:25:28.688]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000102000})"}
+{"level":"info","ts":"[2023-07-01 22:26:55.910]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000150100})"}
+{"level":"info","ts":"[2023-07-01 22:27:31.205]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000358100})"}
+{"level":"info","ts":"[2023-07-01 22:36:14.938]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc0000a4000})"}
+{"level":"info","ts":"[2023-07-01 22:41:25.224]","caller":"gin@v1.9.1/context.go:174","msg":"Before request %!(EXTRA zapcore.Field={request 23 0  0xc000102000})"}

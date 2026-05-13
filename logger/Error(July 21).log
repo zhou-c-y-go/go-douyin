@@ -1,0 +1,2 @@
+{"level":"error","ts":"[2023-07-21 20:16:25.941]","caller":"Go_Project/main.go:18","msg":"redis connect ping failed, err:{error 26 0  dial tcp 127.0.0.1:6379: connectex: No connection could be made because the target machine actively refused it.}"}
+{"level":"error","ts":"[2023-07-21 20:56:34.326]","caller":"Go_Project/main.go:18","msg":"redis connect ping failed, err:{error 26 0  dial tcp 127.0.0.1:6379: connectex: No connection could be made because the target machine actively refused it.}"}
