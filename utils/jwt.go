@@ -97,12 +97,6 @@ func (j *JWT) RenewToken(claims *request.CustomClaims) (string, error) {
 	return "", errors.New("登录已过期")
 }
 
-// 计算过期时间是否超过l
-func (j *JWT) withinLimit(s int64, l int64) bool {
-	e := time.Now().Unix()
-	return e-s < l
-}
-
 func (j *JWT) CreateTokenByOldToken(oldToken string, claims request.CustomClaims) (string, error) {
 	v, err, _ := global.GLOB_Concurrency_Control.Do("JWT:"+oldToken, func() (interface{}, error) {
 		return j.CreateToken(claims)
