@@ -44,6 +44,7 @@ func (j *JWT) CreateToken(claims request.CustomClaims) (string, error) {
 	return tokenString, nil
 }
 
+// ParseToken 验证解密函数
 func (j *JWT) ParseToken(tokenString string) (*request.CustomClaims, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenString,
