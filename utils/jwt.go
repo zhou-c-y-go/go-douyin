@@ -78,7 +78,7 @@ func (j *JWT) UpdateToken(tokenString string) (string, error) {
 }
 func (j *JWT) RenewToken(claims *request.CustomClaims) (string, error) {
 	// 若token过期不超过10分钟则给它续签
-	if j.withinLimit(claims.IssuedAt.Unix(), 600) {
+	if time.Now().Unix()-claims.ExpiresAt.Unix() < 600 {
 		return j.CreateToken(*claims)
 	}
 	return "", errors.New("登录已过期")
