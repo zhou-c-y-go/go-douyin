@@ -14,6 +14,7 @@ var base api.BaseService
 func Routers() *gin.Engine {
 	Router := gin.Default()
 	Router.Use(middleware.CrosHandler())
+	Router.Use(middleware.TraceMiddleware())
 	Router.MaxMultipartMemory = 8 << 20 // 8 MiB
 	Router.StaticFS("../static/headImags", http.Dir("headImags"))
 	v1 := Router.Group("/api/v1/user")
