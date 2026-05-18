@@ -26,8 +26,11 @@ func Routers() *gin.Engine {
 	v2.GET("user", userService.QueryAll)
 	// 通过id删除用户
 	v2.DELETE("/:id", userService.Delete)
+	// 注册用户
 	v2.POST("/register", base.Register)
+	// 重置密码
 	v2.POST("/resetPwd", base.ResetPassword)
+	// 上传头像
 	v2.PUT("/updateImage/:id", userService.UpLoadHeaderImage)
 	return Router
 }

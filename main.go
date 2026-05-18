@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	global.GVA_VP = core.Viper() // 启动viper
+	global.GVA_VP = core.Viper() // 启动viper(配置读取器)
 	logger.Init()
 	//Init.InitMinio()
 	global.GVA_DB = Init.GormMySQL()

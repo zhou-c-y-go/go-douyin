@@ -3,7 +3,7 @@ mysql:
   user: root
   password: 123456
   host: 127.0.0.1:3306
-  name: zcy
+  name: douyin_db
   max-idle-cons: 10
   max-open-cons: 100
 jwt:

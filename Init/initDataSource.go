@@ -25,8 +25,12 @@ func GormMySQL() *gorm.DB {
 		sqlDB.SetMaxIdleConns(m.MaxIdleCons)
 		sqlDB.SetMaxOpenConns(m.MaxOpenCons)
 		fmt.Println("连接成功")
-		err := db.AutoMigrate(&pojo.User{})
-		db.AutoMigrate(&pojo.Admin{})
+		err := db.AutoMigrate(
+			&pojo.User{},
+			&pojo.Admin{},
+			&pojo.Video{},   // 新增：视频表
+			&pojo.Comment{}, // 新增：评论表（带物化路径索引）
+		)
 		if err != nil {
 			fmt.Println("生成表失败")
 		}

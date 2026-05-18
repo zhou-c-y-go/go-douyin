@@ -13,7 +13,6 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"log"
 	"strconv"
 	"time"
 )
@@ -22,7 +21,8 @@ type UserService struct {
 }
 
 var repository = new(repos.UserRepository)
-// @Summary 通过id查询用户
+
+// QueryUserService 通过id查询用户
 func (s *UserService) QueryUserService(c *gin.Context) {
 	var user pojo.User
 	if err := c.ShouldBindJSON(&user); err != nil {
@@ -39,6 +39,7 @@ func (s *UserService) QueryUserService(c *gin.Context) {
 	}
 }
 
+// QueryAll 查询所有的用户
 func (s *UserService) QueryAll(c *gin.Context) {
 	var users []pojo.User
 	users = repository.QueryList()
@@ -49,10 +50,14 @@ func (s *UserService) QueryAll(c *gin.Context) {
 	}
 }
 
+// Login 登录
 func (s *UserService) Login(c *gin.Context) {
 	var l request.Login
 	if err := c.ShouldBindJSON(&l); err != nil {
-		log.Fatal(err)
+		c.JSON(400, gin.H{
+			"code": 400,
+			"msg":  "参数错误: " + err.Error(),
+		})
 		return
 	}
 	u := &pojo.User{Password: l.Password, Username: l.Username}
@@ -90,6 +95,7 @@ func (s *UserService) LoginNext(c *gin.Context, user pojo.User) {
 	}
 }
 
+// Delete 根据id删除用户
 func (s *UserService) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	rows := repository.Delete(id)
@@ -102,6 +108,7 @@ func (s *UserService) Delete(c *gin.Context) {
 
 }
 
+// Register 注册业务实现
 func (s *UserService) Register(u pojo.User) (userInter pojo.User, err error) {
 	var user pojo.User
 	if !errors.Is(global.GVA_DB.Where("username = ?", u.Username).First(&user).Error, gorm.ErrRecordNotFound) { // 判断用户名是否注册
@@ -120,11 +127,13 @@ func (s *UserService) Register(u pojo.User) (userInter pojo.User, err error) {
 	return u, err
 }
 
+// ResetPassword 重置密码业务
 func (s *UserService) ResetPassword(ID uint) (err error) {
 	err = global.GVA_DB.Model(&pojo.User{}).Where("id = ?", ID).Update("password", utils.BcryptHash("123456")).Error
 	return err
 }
 
+// UpLoadHeaderImage 上传头像业务
 func (s *UserService) UpLoadHeaderImage(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var u pojo.User

@@ -11,6 +11,7 @@ import (
 type UserRepository struct {
 }
 
+// QueryByID 持久化id查询
 func (s *UserRepository) QueryByID(id int) pojo.User {
 	var user pojo.User
 	err := global.GVA_DB.Find(&user, id).Error
@@ -21,6 +22,7 @@ func (s *UserRepository) QueryByID(id int) pojo.User {
 	}
 }
 
+// QueryList 持久化用户列表查询
 func (s *UserRepository) QueryList() []pojo.User {
 	var users []pojo.User
 	err := global.GVA_DB.Find(&users).Error
@@ -31,6 +33,7 @@ func (s *UserRepository) QueryList() []pojo.User {
 	}
 }
 
+// Delete 删除用户
 func (s *UserRepository) Delete(id int) int64 {
 	var user pojo.User
 	tx := global.GVA_DB.Unscoped().Where("id = ?", id).Delete(&user)
@@ -43,6 +46,7 @@ func (s *UserRepository) Delete(id int) int64 {
 	}
 }
 
+// Validate 验证密码
 func (s *UserRepository) Validate(u *pojo.User) (*pojo.User, error) {
 	var user pojo.User
 	err := global.GVA_DB.Where("username = ?", u.Username).Find(&user).Error

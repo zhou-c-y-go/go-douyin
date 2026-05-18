@@ -19,6 +19,7 @@ var usrService service.UserService
 type BaseService struct {
 }
 
+// Register 注册接口
 func (b *BaseService) Register(c *gin.Context) {
 	var r request.Register
 	if err := utils.InitTrans("zh"); err != nil {
@@ -53,6 +54,7 @@ func (b *BaseService) Register(c *gin.Context) {
 	response.Success(c, userReturn)
 }
 
+// ResetPassword 密码重置接口
 func (b *BaseService) ResetPassword(c *gin.Context) {
 	var user pojo.User
 	err := c.ShouldBindJSON(&user)

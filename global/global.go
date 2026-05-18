@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// 全局变量管理文件
 var (
 	Logger                   *zap.Logger
 	SugaredLogger            *zap.SugaredLogger
