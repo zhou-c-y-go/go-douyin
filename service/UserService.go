@@ -61,7 +61,7 @@ func (s *UserService) Login(c *gin.Context) {
 		return
 	}
 	u := &pojo.User{Password: l.Password, Username: l.Username}
-	user, err := repository.Validate(u)
+	user, err := repository.FindUserByIdentifier(u)
 	if err != nil || user == nil {
 		global.SugaredLogger.Error("登陆失败! 用户名不存在或者密码错误!", zap.Error(err))
 		return
@@ -77,7 +77,9 @@ func (s *UserService) Login(c *gin.Context) {
 
 // LoginNext 发放令牌
 func (s *UserService) LoginNext(c *gin.Context, user pojo.User) {
+	// 生成JWT
 	j := utils.NewJWT()
+	// Claim是用户信息部分
 	claim := j.CreateClaim(request.BaseClaims{
 		Id:          user.ID,
 		UUID:        user.UUID,

@@ -47,9 +47,9 @@ func (s *UserRepository) Delete(id int) int64 {
 }
 
 // Validate 验证密码
-func (s *UserRepository) Validate(u *pojo.User) (*pojo.User, error) {
+func (s *UserRepository) FindUserByIdentifier(u *pojo.User) (*pojo.User, error) {
 	var user pojo.User
-	err := global.GVA_DB.Where("username = ?", u.Username).Find(&user).Error
+	err := global.GVA_DB.Where("username = ? OR telephone = ? OR email = ?", u.Username, u.Username, u.Username).First(&user).Error
 	if err != nil || user == (pojo.User{}) {
 		global.SugaredLogger.Errorf("query error: username is %s, password is %s", u.Username)
 		return nil, err

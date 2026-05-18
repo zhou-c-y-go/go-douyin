@@ -7,6 +7,7 @@ import (
 	"Go_Project/global"
 	"Go_Project/service"
 	"Go_Project/utils"
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -26,7 +27,8 @@ func (b *BaseService) Register(c *gin.Context) {
 		fmt.Println("翻译器初始化失败:", err)
 	}
 	if err := c.ShouldBind(&r); err != nil {
-		errs, ok := err.(validator.ValidationErrors)
+		var errs validator.ValidationErrors
+		ok := errors.As(err, &errs)
 		if !ok {
 			return
 		}

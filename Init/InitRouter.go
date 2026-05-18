@@ -17,6 +17,7 @@ func Routers() *gin.Engine {
 	Router.MaxMultipartMemory = 8 << 20 // 8 MiB
 	Router.StaticFS("../static/headImags", http.Dir("headImags"))
 	v1 := Router.Group("/api/v1/user")
+	v1.POST("/register", base.Register)
 	// 登录接口
 	v1.POST("/login", userService.Login)
 	v2 := v1.Group("/base").Use(middleware.JWTAuth(), middleware.CasbinController())
@@ -26,8 +27,6 @@ func Routers() *gin.Engine {
 	v2.GET("user", userService.QueryAll)
 	// 通过id删除用户
 	v2.DELETE("/:id", userService.Delete)
-	// 注册用户
-	v2.POST("/register", base.Register)
 	// 重置密码
 	v2.POST("/resetPwd", base.ResetPassword)
 	// 上传头像
