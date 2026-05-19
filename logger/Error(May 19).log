@@ -1,0 +1,31 @@
+{"level":"error","ts":"[2026-05-19 14:21:35.418]","caller":"Go_Project/main.go:18","msg":"redis connect ping failed, err:{error 26 0  dial tcp 127.0.0.1:6379: connectex: No connection could be made because the target machine actively refused it.}"}
+{"level":"error","ts":"[2026-05-19 16:01:19.478]","caller":"Go_Project/main.go:18","msg":"redis connect ping failed, err:{error 26 0  dial tcp 127.0.0.1:6379: connectex: No connection could be made because the target machine actively refused it.}"}
+{"level":"error","ts":"[2026-05-19 16:10:47.161]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:10:47.161]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:10:49.339]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:10:49.339]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:11:00.679]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:11:00.679]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:11:01.039]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:11:01.039]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:11:01.200]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:11:01.200]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:11:01.331]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:11:01.331]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:11:01.470]","caller":"service/UserService.go:65","msg":"query error: username is tempuser, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:11:01.470]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:17:16.006]","caller":"service/UserService.go:65","msg":"query error: username is ewe, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:17:16.006]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:17:41.313]","caller":"service/UserService.go:65","msg":"query error: username is ewe, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:17:41.313]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:20:04.188]","caller":"Go_Project/main.go:18","msg":"redis connect ping failed, err:{error 26 0  dial tcp 127.0.0.1:6379: connectex: No connection could be made because the target machine actively refused it.}"}
+{"level":"error","ts":"[2026-05-19 16:20:42.676]","caller":"service/UserService.go:65","msg":"query error: username is ewe, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:20:42.676]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:24:18.644]","caller":"service/UserService.go:65","msg":"query error: username is eee, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:24:18.644]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:26:40.560]","caller":"service/UserService.go:65","msg":"query error: username is ew, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:26:40.560]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:28:14.889]","caller":"service/UserService.go:65","msg":"query error: username is 2312, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:28:14.889]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}
+{"level":"error","ts":"[2026-05-19 16:29:15.825]","caller":"service/UserService.go:65","msg":"query error: username is wewew, password is %!s(MISSING)"}
+{"level":"error","ts":"[2026-05-19 16:29:15.825]","caller":"gin@v1.9.1/context.go:174","msg":"登陆失败! 用户名不存在或者密码错误!{error 26 0  record not found}"}

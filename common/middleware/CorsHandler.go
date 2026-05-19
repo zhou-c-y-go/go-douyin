@@ -15,6 +15,7 @@ func CrosHandler() gin.HandlerFunc {
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers,Cache-Control,Content-Language,Content-Type,Expires,Last-Modified,Pragma,FooBar")
 		c.Header("Access-Control-Max-Age", "172800")
 		c.Header("Access-Control-Allow-Credentials", "false")
+		c.Header("Access-Control-Expose-Headers", "X-Trace-Id, New-Token, New-Refresh-Token, new-token, new-expired-at")
 		c.Set("content-type", "application/json")
 
 		if method == "OPTIONS" {

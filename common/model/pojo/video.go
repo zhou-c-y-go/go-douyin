@@ -1,11 +1,19 @@
 package pojo
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+	"time"
+)
 
 type Video struct {
 	gorm.Model
-	AuthorID uint   `gorm:"index;not null" json:"author_id"`
-	PlayURL  string `gorm:"type:varchar(255);not null" json:"play_url"`  // 视频播放地址 (Minio)
-	CoverURL string `gorm:"type:varchar(255);not null" json:"cover_url"` // 封面图地址
-	Title    string `gorm:"type:varchar(100);not null" json:"title"`
+	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Title      string    `gorm:"type:varchar(255);not null" json:"title"`      // 视频标题/描述
+	AuthorName string    `gorm:"type:varchar(50);not null" json:"author_name"` // 作者昵称
+	VideoUrl   string    `gorm:"type:varchar(500);not null" json:"video_url"`  // 视频播放源
+	CoverUrl   string    `gorm:"type:varchar(500);not null" json:"cover_url"`  // 封面图片
+	Duration   string    `gorm:"type:varchar(20)" json:"duration"`             // 播放时长
+	LikeCount  string    `gorm:"type:varchar(20)" json:"like_count" `          // 点赞数
+	Tags       string    `gorm:"type:varchar(255)" json:"tags"`                // 标签
+	CreateTime time.Time `gorm:"autoCreateTime" json:"create_time"`
 }

@@ -7,6 +7,7 @@ import (
 	repos "Go_Project/common/repository"
 	"Go_Project/global"
 	"Go_Project/utils"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -64,6 +65,7 @@ func (s *UserService) Login(c *gin.Context) {
 	user, err := repository.FindUserByIdentifier(u)
 	if err != nil || user == nil {
 		global.SugaredLogger.Error("登陆失败! 用户名不存在或者密码错误!", zap.Error(err))
+		response.Fail(c, response.ERROR, "用户不存在或者密码错误")
 		return
 	}
 	if user.Status != 1 {
@@ -111,21 +113,26 @@ func (s *UserService) Delete(c *gin.Context) {
 }
 
 // Register 注册业务实现
-func (s *UserService) Register(u pojo.User) (userInter pojo.User, err error) {
+func (s *UserService) Register(ctx context.Context, u pojo.User) (userInter pojo.User, err error) {
 	var user pojo.User
+	global.LogCtx(ctx).Infof("开始处理用户注册逻辑，用户名: %s", u.Username)
 	if !errors.Is(global.GVA_DB.Where("username = ?", u.Username).First(&user).Error, gorm.ErrRecordNotFound) { // 判断用户名是否注册
+		global.LogCtx(ctx).Errorw("检索数据库用户失败（用户名已注册）", "err", err)
 		return userInter, errors.New("用户名已注册")
 	}
 	if !errors.Is(global.GVA_DB.Where("email = ?", u.Email).First(&user).Error, gorm.ErrRecordNotFound) {
+		global.LogCtx(ctx).Errorw("检索数据库用户失败（邮箱重复）", "err", err)
 		return userInter, errors.New("邮箱重复")
 	}
 	if !errors.Is(global.GVA_DB.Where("telephone = ?", u.Telephone).First(&user).Error, gorm.ErrRecordNotFound) {
+		global.LogCtx(ctx).Errorw("检索数据库用户失败（电话号码重复）", "err", err)
 		return userInter, errors.New("电话号码重复")
 	}
 	u.Password = utils.BcryptHash(u.Password)
 	u.UUID = uuid.Must(uuid.New(), nil)
 	u.Status = 1
 	err = global.GVA_DB.Create(&u).Error
+	global.LogCtx(ctx).Info("用户注册成功！")
 	return u, err
 }
 

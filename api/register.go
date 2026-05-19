@@ -7,8 +7,8 @@ import (
 	"Go_Project/global"
 	"Go_Project/service"
 	"Go_Project/utils"
+	"context"
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
@@ -23,8 +23,9 @@ type BaseService struct {
 // Register 注册接口
 func (b *BaseService) Register(c *gin.Context) {
 	var r request.Register
+	ctx := c.Request.Context()
 	if err := utils.InitTrans("zh"); err != nil {
-		fmt.Println("翻译器初始化失败:", err)
+		global.SugaredLogger.Errorw("翻译器初始化失败:", "err", err)
 	}
 	if err := c.ShouldBind(&r); err != nil {
 		var errs validator.ValidationErrors
@@ -37,6 +38,7 @@ func (b *BaseService) Register(c *gin.Context) {
 			"error-message": errs.Translate(utils.Trans),
 			"data":          nil,
 		})
+		global.SugaredLogger.Errorw("参数绑定错误", "err", err)
 		return
 	}
 	user := &pojo.User{
@@ -47,7 +49,7 @@ func (b *BaseService) Register(c *gin.Context) {
 		Status:    r.Status,
 	}
 	userService := service.UserService{}
-	userReturn, err := userService.Register(*user)
+	userReturn, err := userService.Register(ctx, *user)
 	if err != nil {
 		global.SugaredLogger.Error("注册失败!", zap.Error(err))
 		response.Fail(c, response.ERROR, "注册失败!")
@@ -71,4 +73,16 @@ func (b *BaseService) ResetPassword(c *gin.Context) {
 		return
 	}
 	response.Success(c, "重置成功")
+}
+
+func (s *BaseService) GetFeedListMiddle(ctx context.Context) ([]pojo.Video, error) {
+	// 💡 自动带上追踪身份证号
+	global.LogCtx(ctx).Info("开始拉取首页公共视频流数据")
+	var list []pojo.Video
+	err := global.GVA_DB.Order("id DESC").Limit(10).Find(&list).Error
+	if err != nil {
+		global.LogCtx(ctx).Errorw("拉取视频流数据库大翻车", "err", err)
+		return nil, err
+	}
+	return list, nil
 }

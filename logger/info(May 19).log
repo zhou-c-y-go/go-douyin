@@ -1,0 +1,5 @@
+{"level":"info","ts":"[2026-05-19 16:43:14.370]","caller":"Go_Project/main.go:18","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}
+{"level":"info","ts":"[2026-05-19 16:47:21.139]","caller":"Go_Project/main.go:18","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}
+{"level":"info","ts":"[2026-05-19 16:47:32.729]","caller":"Go_Project/main.go:18","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}
+{"level":"info","ts":"[2026-05-19 16:50:50.005]","caller":"Go_Project/main.go:18","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}
+{"level":"info","ts":"[2026-05-19 16:55:41.194]","caller":"Go_Project/main.go:21","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}

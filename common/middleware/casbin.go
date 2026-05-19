@@ -16,6 +16,7 @@ func CasbinController() gin.HandlerFunc {
 		claim, _ := utils.GetClaim(c)
 		if claim == nil {
 			response.Fail(c, response.ERROR, "请您登录")
+			global.SugaredLogger.Info("用户没有登录")
 			c.Abort()
 			return
 		}
@@ -24,10 +25,15 @@ func CasbinController() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		obj := strings.TrimPrefix(path, global.GLOB_CONFIG.System.RouterPrefix)
 		e := casbin.InitConfig()
-		e.LoadPolicy()
+		err := e.LoadPolicy()
+		if err != nil {
+			global.SugaredLogger.Errorw("角色规则加载失败:", "err", err.Error())
+			return
+		}
 		success, _ := e.Enforce(sub, obj, act)
 		if !success {
 			response.Fail(c, response.ERROR, "权限不足")
+			global.SugaredLogger.Infow("权限不足:", "err", err.Error())
 			c.Abort()
 			return
 		}

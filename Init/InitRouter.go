@@ -10,6 +10,7 @@ import (
 
 var userService service.UserService
 var base api.BaseService
+var videoService = api.VideoService{}
 
 func Routers() *gin.Engine {
 	Router := gin.Default()
@@ -21,7 +22,9 @@ func Routers() *gin.Engine {
 	v1.POST("/register", base.Register)
 	// 登录接口
 	v1.POST("/login", userService.Login)
-	v2 := v1.Group("/base").Use(middleware.JWTAuth(), middleware.CasbinController())
+	v1.GET("/video/feed", videoService.GetFeedList).Use(middleware.JWTAuth())
+	// 管理员端口
+	v2 := v1.Group("/base").Use(middleware.CasbinController())
 	// 通过id查询用户接口
 	v2.GET("/:id", userService.QueryUserService)
 	// 查询用户接口

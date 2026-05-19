@@ -5,7 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 解析token
+// GetClaim 解析token
 func GetClaim(c *gin.Context) (*request.CustomClaims, error) {
 	token := c.Request.Header.Get("x-token")
 	j := NewJWT()
@@ -17,7 +17,7 @@ func GetClaim(c *gin.Context) (*request.CustomClaims, error) {
 	}
 }
 
-// 获取用户id
+// GetUserID 获取用户id
 func GetUserID(c *gin.Context) int64 {
 	if claims, exists := c.Get("claim"); !exists {
 		if cl, err := GetClaim(c); err != nil {

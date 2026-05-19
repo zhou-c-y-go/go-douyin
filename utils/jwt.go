@@ -3,8 +3,6 @@ package utils
 import (
 	"Go_Project/common/model/request"
 	"Go_Project/global"
-	"errors"
-	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"time"
 )
