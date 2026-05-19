@@ -30,10 +30,17 @@ func JWTAuth() gin.HandlerFunc {
 		}
 		if claims.ExpiresAt.Unix() >= time.Now().Unix() {
 			claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(2 * time.Hour))
-			newToken, _ := j.CreateTokenByOldToken(token, *claims)
-			newClaim, _ := j.ParseToken(newToken)
-			c.Header("new-token", newToken)
-			c.Header("new-expired-at", strconv.FormatInt(newClaim.ExpiresAt.Unix(), 10))
+			newToken, err := j.CreateTokenByOldToken(token, *claims)
+			if err != nil {
+				redisKey := fmt.Sprintf("UserToken:%d", claims.ID)
+				global.GVA_REDIS.Set(c.Request.Context(), redisKey, newToken, 24*time.Hour)
+				// 2. 将新的 Token 塞进响应头，让前端静默更新
+				c.Header("new-token", newToken)
+				c.Header("new-expired-at", strconv.FormatInt(claims.ExpiresAt.Unix(), 10))
+				global.SugaredLogger.Infof("用户[%d]触发无感续签，Redis已同步更新", claims.ID)
+			} else {
+				global.SugaredLogger.Errorw("无感续签生成新Token失败", "err", err)
+			}
 		}
 		c.Set("claim", claims)
 		c.Next()
