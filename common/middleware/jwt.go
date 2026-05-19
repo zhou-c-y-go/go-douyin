@@ -20,15 +20,27 @@ func JWTAuth() gin.HandlerFunc {
 		}
 		j := utils.NewJWT()
 		claims, err := j.ParseToken(token)
-		if err != nil {
-			if strings.Contains(err.Error(), "expired") {
-				response.Fail(c, response.ERROR, "token已经过期")
-				c.Abort()
-				return
-			}
-			response.Fail(c, response.ERROR, err.Error())
+
+		redisKey := fmt.Sprintf("UserToken:%d", claims.ID)
+		cachedToken, err := global.GVA_REDIS.Get(c.Request.Context(), redisKey).Result()
+		if err == redis.Nil {
+
+			response.Fail(c, response.ERROR, "登录已过期，请重新登录")
+		} else if strings.Contains(err.Error(), "expired") {
+			global.SugaredLogger.Errorw("Redis校验Token异常", "err", err)
+			response.Fail(c, response.ERROR, "Redis校验Token异常")
+			c.Abort()
+			return
 		}
-		if claims.ExpiresAt.Unix() >= time.Now().Unix() {
+		if cachedToken != token {
+			c.JSON(401, gin.H{"code": 401, "msg": "您的账号已在其他设备登录"})
+			c.Abort()
+			return
+		}
+		// 更新token
+		now := time.Now().Unix()
+		expiresAt := claims.ExpiresAt.Unix()
+		if expiresAt > now && (expiresAt-now) < 1800 {
 			claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(2 * time.Hour))
 			newToken, err := j.CreateTokenByOldToken(token, *claims)
 			if err != nil {
