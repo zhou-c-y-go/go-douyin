@@ -97,6 +97,16 @@ func (s *UserService) LoginNext(c *gin.Context, user pojo.User) {
 	} else {
 		response.Success(c, token)
 	}
+	ctx := c.Request.Context()
+	redisKey := "JWT:" + token
+	err = global.GVA_REDIS.Set(ctx, redisKey, user.Username, static.Jwt_time).Err()
+	if err != nil {
+		global.LogCtx(ctx).Errorw("💥 致命：Token 写入 Redis 失败！", "err", err)
+		response.Fail(c, response.ERROR, "系统服务异常，请重试")
+		return
+	} else {
+		global.LogCtx(ctx).Infof("%s token已被写入redis", redisKey)
+	}
 }
 
 // Delete 根据id删除用户
