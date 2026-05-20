@@ -24,13 +24,12 @@ var (
 )
 
 func LogCtx(ctx context.Context) *zap.SugaredLogger {
-	if ctx == nil {
-		return SugaredLogger
+	traceId := GetTraceId(ctx)
+	if traceId != "" {
+		// 2. 如果存在，利用 Zap 的 With 机制，给这条日志强行绑上身份证号字段
+		return SugaredLogger.With("traceId", traceId)
 	}
-	// 从 Go 标准上下文中取出 TraceID
-	if traceID, ok := ctx.Value("traceId").(string); ok {
-		// 💡 利用 Zap 的 With 功能，后续这行日志后面会自动追加 "traceId": "xxxx"
-		return SugaredLogger.With("traceId", traceID)
-	}
+
+	// 3. 如果没拿到，返回普通日志对象
 	return SugaredLogger
 }
