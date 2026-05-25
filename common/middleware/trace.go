@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"context"
+	"Go_Project/global"
 	"crypto/rand"
 	"encoding/hex"
 	"github.com/gin-gonic/gin"
@@ -26,7 +26,7 @@ func TraceMiddleware() gin.HandlerFunc {
 		c.Set("traceId", traceID)
 
 		// 3. 💡 最地道的大厂写法：同时注入到标准 Go 核心 Request Context 中
-		ctx := context.WithValue(c.Request.Context(), "traceId", traceID)
+		ctx := global.WithTraceId(c.Request.Context(), traceID)
 		c.Request = c.Request.WithContext(ctx)
 
 		// 4. 将 TraceID 写入响应头，返还给前端（前端报错时可以展示出来）

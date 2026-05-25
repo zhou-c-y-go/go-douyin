@@ -6,6 +6,7 @@ import (
 	"Go_Project/common/model/response"
 	repos "Go_Project/common/repository"
 	"Go_Project/global"
+	"Go_Project/static"
 	"Go_Project/utils"
 	"context"
 	"errors"

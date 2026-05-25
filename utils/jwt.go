@@ -3,6 +3,7 @@ package utils
 import (
 	"Go_Project/common/model/request"
 	"Go_Project/global"
+	"Go_Project/static"
 	"github.com/golang-jwt/jwt/v5"
 	"time"
 )
@@ -24,9 +25,9 @@ func (j *JWT) CreateClaim(baseClaim request.BaseClaims) request.CustomClaims {
 	claim := request.CustomClaims{
 		BaseClaims: baseClaim,
 		RegisteredClaims: jwt.RegisteredClaims{
-			IssuedAt:  jwt.NewNumericDate(time.Now()),                         // 签发时间
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), // 过期时间
-			NotBefore: jwt.NewNumericDate(time.Now().Add(1 * time.Second)),    // 在该什么时间，该jwt都是不可用
+			IssuedAt:  jwt.NewNumericDate(time.Now()),                      // 签发时间
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(static.Jwt_time)), // 过期时间
+			NotBefore: jwt.NewNumericDate(time.Now().Add(1 * time.Second)), // 在该什么时间，该jwt都是不可用
 			Subject:   "login",
 		},
 	}
