@@ -11,7 +11,6 @@ type BaseClaims struct {
 	UUID        uuid.UUID
 	Id          int64
 	UserName    string
-	Password    string
 }
 type CustomClaims struct {
 	BaseClaims
