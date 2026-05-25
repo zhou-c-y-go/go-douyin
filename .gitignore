@@ -11,8 +11,8 @@
 .idea/
 .logger/
 go.sum
-.tmp/
-.test/
+tmp/
+test/
 # 忽略本地环境变量
 .env
 config.yaml
