@@ -1,3 +1,0 @@
-{"level":"error","ts":"[2023-07-02 14:32:01.978]","caller":"service/UserService.go:44","msg":"query users by id is error: invalid value, should be pointer to struct or slice id is 1"}
-{"level":"error","ts":"[2023-07-02 14:33:01.228]","caller":"service/UserService.go:44","msg":"query users by id is error: invalid value, should be pointer to struct or slice id is 1"}
-{"level":"error","ts":"[2023-07-02 15:20:31.259]","caller":"test/test.go:19","msg":"query users by id is error: Error 1054 (42S22): Unknown column 'nil' in 'where clause' id is 2"}

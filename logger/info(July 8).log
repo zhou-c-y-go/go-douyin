@@ -1,1 +1,0 @@
-{"level":"info","ts":"[2023-07-08 13:33:14.632]","caller":"Go_Project/main.go:18","msg":"redis connect ping response:{pong 15 0 PONG <nil>}"}

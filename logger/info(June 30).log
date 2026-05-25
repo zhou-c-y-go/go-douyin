@@ -1,2 +1,0 @@
-{"level":"info","ts":"[2023-06-30 21:00:38.398]","caller":"gin@v1.9.1/context.go:174","msg":"Before request","requestError":"json: unsupported type: func() (io.ReadCloser, error)"}
-{"level":"info","ts":"[2023-06-30 21:00:38.401]","caller":"gin@v1.9.1/context.go:174","msg":"After request","request":200}
