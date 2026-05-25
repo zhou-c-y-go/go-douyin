@@ -22,6 +22,7 @@ func Routers() *gin.Engine {
 	v1.POST("/register", base.Register)
 	// 登录接口
 	v1.POST("/login", userService.Login)
+	// 获取视频列表
 	v1.GET("/video/feed", videoService.GetFeedList).Use(middleware.JWTAuth())
 	// 管理员端口
 	v2 := v1.Group("/base").Use(middleware.CasbinController())
