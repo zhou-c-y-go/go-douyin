@@ -63,6 +63,15 @@ func (s *UserRepository) FindUserByIdentifier(u *pojo.User) (*pojo.User, error) 
 	}
 }
 
-func NewUserRepository() *UserRepository {
-	return &UserRepository{}
+// Update 更新用户信息
+func (s *UserRepository) Update(user *pojo.User) int64 {
+	// 使用 Updates 传入结构体，GORM 会自动忽略零值，只更新有值的字段
+	tx := global.GVA_DB.Model(&pojo.User{}).Where("id = ?", user.ID).Updates(user)
+
+	if tx.Error != nil {
+		global.SugaredLogger.Warn(tx.Error)
+		return 0
+	} else {
+		return tx.RowsAffected
+	}
 }
