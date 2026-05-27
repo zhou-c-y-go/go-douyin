@@ -46,7 +46,7 @@ func (s *UserRepository) Delete(id int) int64 {
 	}
 }
 
-// Validate 验证密码
+// FindUserByIdentifier 验证密码
 func (s *UserRepository) FindUserByIdentifier(u *pojo.User) (*pojo.User, error) {
 	var user pojo.User
 	err := global.GVA_DB.Where("username = ? OR telephone = ? OR email = ?", u.Username, u.Username, u.Username).First(&user).Error
@@ -69,7 +69,17 @@ func (s *UserRepository) Update(user *pojo.User) int64 {
 	tx := global.GVA_DB.Model(&pojo.User{}).Where("id = ?", user.ID).Updates(user)
 
 	if tx.Error != nil {
-		global.SugaredLogger.Warn(tx.Error)
+		global.SugaredLogger.Error(tx.Error)
+		return 0
+	} else {
+		return tx.RowsAffected
+	}
+}
+
+func (s *UserRepository) UpdateHeadImag(u *pojo.User, headerUrl string) int64 {
+	tx := global.GVA_DB.Model(u).Where("id = ?", u.ID).Update("head_img", headerUrl)
+	if tx.Error != nil {
+		global.SugaredLogger.Error(tx.Error)
 		return 0
 	} else {
 		return tx.RowsAffected

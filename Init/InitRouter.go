@@ -3,14 +3,12 @@ package Init
 import (
 	"Go_Project/api"
 	"Go_Project/common/middleware"
-	"Go_Project/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
-var userService service.UserService
-var base api.BaseService
-var videoService = api.VideoService{}
+var userController api.UserController
+var videoController = api.VideoController{}
 
 func Routers() *gin.Engine {
 	Router := gin.Default()
@@ -19,22 +17,29 @@ func Routers() *gin.Engine {
 	Router.MaxMultipartMemory = 8 << 20 // 8 MiB
 	Router.StaticFS("../static/headImags", http.Dir("headImags"))
 	v1 := Router.Group("/api/v1/user")
-	v1.POST("/register", base.Register)
+	v1.POST("/register", userController.Register)
 	// 登录接口
-	v1.POST("/login", userService.Login)
-	// 获取视频列表
-	v1.GET("/video/feed", videoService.GetFeedList).Use(middleware.JWTAuth())
+	v1.POST("/login", userController.Login)
+	authGroup := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
+	{
+		// 获取视频列表
+		authGroup.GET("/video/feed", videoController.GetFeedList)
+		// 个人主页接口 (这样写，JWTAuth 绝对在 GetUserProfile 之前执行！)
+		authGroup.GET("/profile", userController.GetUserProfile)
+		authGroup.PUT("/update", userController.UpdateUserInfo)
+		authGroup.POST("/avatar", userController.UploadHeaderImage)
+	}
 	// 管理员端口
-	v2 := v1.Group("/base").Use(middleware.CasbinController())
-	// 通过id查询用户接口
-	v2.GET("/:id", userService.QueryUserService)
-	// 查询用户接口
-	v2.GET("user", userService.QueryAll)
-	// 通过id删除用户
-	v2.DELETE("/:id", userService.Delete)
-	// 重置密码
-	v2.POST("/resetPwd", base.ResetPassword)
-	// 上传头像
-	v2.PUT("/updateImage/:id", userService.UpLoadHeaderImage)
+	//v2 := Router.Group("/admin").Use(middleware.CasbinController())
+	//// 通过id查询用户接口
+	//v2.GET("/:id", userService.QueryUserService)
+	//// 查询用户接口
+	//v2.GET("user", userService.QueryAll)
+	//// 通过id删除用户
+	//v2.DELETE("/:id", userService.Delete)
+	//// 重置密码
+	//v2.POST("/resetPwd", base.ResetPassword)
+	//// 上传头像
+	//v2.PUT("/updateImage/:id", userService.UploadAvatar)
 	return Router
 }

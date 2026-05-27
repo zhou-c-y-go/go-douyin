@@ -4,6 +4,7 @@ import (
 	"Go_Project/common/model/request"
 	"Go_Project/global"
 	"Go_Project/static"
+	"errors"
 	"github.com/golang-jwt/jwt/v5"
 	"time"
 )
@@ -36,7 +37,7 @@ func (j *JWT) CreateClaim(baseClaim request.BaseClaims) request.CustomClaims {
 
 func (j *JWT) CreateToken(claims request.CustomClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(NewJWT().SigningKey)
+	tokenString, err := token.SignedString(j.SigningKey)
 	if err != nil {
 		return "", err
 	}
@@ -63,8 +64,18 @@ func (j *JWT) ParseToken(tokenString string) (*request.CustomClaims, error) {
 }
 
 func (j *JWT) CreateTokenByOldToken(oldToken string, claims request.CustomClaims) (string, error) {
+	// 使用 SingleFlight 完美合并无感续签并发请求
 	v, err, _ := global.GLOB_Concurrency_Control.Do("JWT:"+oldToken, func() (interface{}, error) {
 		return j.CreateToken(claims)
 	})
-	return v.(string), err
+
+	// 💡 核心修复：增加安全御盾防线，防止 v 为 nil 时断言失败导致进程 panic 崩溃
+	if err != nil {
+		return "", err
+	}
+
+	if tokenStr, ok := v.(string); ok {
+		return tokenStr, nil
+	}
+	return "", errors.New("token invalid")
 }

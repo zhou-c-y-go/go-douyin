@@ -24,7 +24,7 @@ func GormMySQL() *gorm.DB {
 		sqlDB, _ := db.DB()
 		sqlDB.SetMaxIdleConns(m.MaxIdleCons)
 		sqlDB.SetMaxOpenConns(m.MaxOpenCons)
-		fmt.Println("连接成功")
+		fmt.Println("MySQL连接成功")
 		err := db.AutoMigrate(
 			&pojo.User{},
 			&pojo.Admin{},

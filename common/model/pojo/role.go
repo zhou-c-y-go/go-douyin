@@ -21,6 +21,7 @@ type User struct {
 	TotalFavorited  int64     `json:"total_favorited"`  // 获赞数量
 	WorkCount       int64     `json:"work_count"`       // 作品数量
 	FavoriteCount   int64     `json:"favorite_count"`   // 点赞数量
+	Gender          string    `json:"gender" gorm:"column:gender;comment:角色"`
 }
 
 type Admin struct {

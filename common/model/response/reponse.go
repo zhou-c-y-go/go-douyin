@@ -44,4 +44,5 @@ type UserProfileResponse struct {
 	TotalLiked      int64  `json:"total_liked"` // 对应前端的 total_liked (后端 TotalFavorited)
 	WorkCount       int64  `json:"work_count"`
 	FavoriteCount   int64  `json:"favorite_count"`
+	Gender          string `json:"gender"`
 }
