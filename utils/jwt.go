@@ -63,12 +63,13 @@ func (j *JWT) ParseToken(tokenString string) (*request.CustomClaims, error) {
 }
 
 func (j *JWT) CreateTokenByOldToken(oldToken string, claims request.CustomClaims) (string, error) {
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(static.Jwt_time))
+	claims.IssuedAt = jwt.NewNumericDate(time.Now()) // 💡 顺手把签发时间更新为现在
+	claims.NotBefore = jwt.NewNumericDate(time.Now())
 	// 使用 SingleFlight 完美合并无感续签并发请求
 	v, err, _ := global.GLOB_Concurrency_Control.Do("JWT:"+oldToken, func() (interface{}, error) {
 		return j.CreateToken(claims)
 	})
-
-	// 💡 核心修复：增加安全御盾防线，防止 v 为 nil 时断言失败导致进程 panic 崩溃
 	if err != nil {
 		return "", err
 	}

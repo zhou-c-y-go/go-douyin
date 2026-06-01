@@ -43,7 +43,7 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 3. 实例化你的 jwt.go 并直接解析 Token（不需要在之前盲查一次 Redis 啦）
+		// 3. 实例化并直接解析 Token（不需要在之前盲查一次 Redis 啦）
 		j := utils.NewJWT()
 		claims, err := j.ParseToken(token)
 		if err != nil {
