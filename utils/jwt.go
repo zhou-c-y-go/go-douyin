@@ -51,8 +51,7 @@ func (j *JWT) ParseToken(tokenString string) (*request.CustomClaims, error) {
 		&request.CustomClaims{},
 		func(token *jwt.Token) (interface{}, error) {
 			return j.SigningKey, nil
-		},
-	)
+		}, jwt.WithLeeway(5*time.Second))
 	if token != nil {
 		if claims, ok := token.Claims.(*request.CustomClaims); ok && token.Valid {
 			return claims, nil
