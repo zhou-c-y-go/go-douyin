@@ -12,6 +12,7 @@ import (
 
 func main() {
 	global.GVA_VP = core.Viper() // 启动viper(配置读取器)
+	_ = global.GVA_VP
 	logger.Init()
 	Init.InitMinio()
 	global.GVA_DB = Init.GormMySQL()
@@ -22,5 +23,9 @@ func main() {
 			return
 		}
 	}
-	Init.Routers().Run(global.GLOB_CONFIG.System.Port)
+	err := Init.Routers().Run(global.GLOB_CONFIG.System.Port)
+	if err != nil {
+		global.SugaredLogger.Error(err.Error())
+		return
+	}
 }

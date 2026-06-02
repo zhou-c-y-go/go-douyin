@@ -3,7 +3,7 @@ package global
 import (
 	"Go_Project/setting"
 	"context"
-	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"

@@ -7,6 +7,7 @@ import (
 	"Go_Project/service"
 	"github.com/gin-gonic/gin"
 	"mime/multipart"
+	"strconv"
 )
 
 type VideoController struct {
@@ -19,10 +20,11 @@ func (api *VideoController) UploadVideo(c *gin.Context) {
 	claimInterface, _ := c.Get("claim")
 	claims := claimInterface.(*request.CustomClaims)
 	authorID := claims.Id
-
 	// 2. 扒出表单中文本和媒体流
 	title := c.PostForm("title")
-
+	tags := c.PostForm("tags")
+	durationStr := c.PostForm("duration")
+	duration, _ := strconv.ParseInt(durationStr, 10, 64)
 	videoFile, err := c.FormFile("video")
 	if err != nil {
 		response.Fail(c, response.ERROR, "视频文件必传")
@@ -33,7 +35,6 @@ func (api *VideoController) UploadVideo(c *gin.Context) {
 		response.Fail(c, response.ERROR, "封面图片必传")
 		return
 	}
-
 	// 3. 打开双流通道
 	// 视频文件
 	videoObj, err := videoFile.Open()
@@ -65,8 +66,8 @@ func (api *VideoController) UploadVideo(c *gin.Context) {
 
 	// 4. 获取带有日志追踪的 context
 	ctx := c.Request.Context()
-	global.LogCtx(ctx).Infof("📥 [Controller] 用户 [%d] 正在投递新视频: %s", authorID, title)
-	if err := api.videoService.UploadVideoService(ctx, title, videoFile, coverFile, videoObj, coverObj, authorID); err != nil {
+	global.LogCtx(ctx).Infof("📥 [Controller] 用户 [%d] 正在投递新视频: %s, 标签: %s", authorID, title, tags)
+	if err := api.videoService.UploadVideoService(ctx, title, tags, videoFile, coverFile, videoObj, coverObj, authorID, duration); err != nil {
 		response.Fail(c, response.ERROR, err.Error())
 		return
 	}
@@ -97,4 +98,28 @@ func (api *VideoController) GetFeedStream(c *gin.Context) {
 
 	// 完美对齐大厂契约：返回 code:1 和组装好的豪华 VO 数组！
 	response.Success(c, videoVOs)
+}
+
+// RepairDuration ── 承接前端自愈系统派发过来的老数据清洗指标
+func (api *VideoController) RepairDuration(c *gin.Context) {
+	// 声明轻量级接收结构体
+	var req struct {
+		ID       int64 `json:"id" binding:"required"`
+		Duration int64 `json:"duration" binding:"required"`
+	}
+
+	// 如果前端传过来的 JSON 格式不对，直接优雅挂起
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ERROR, "参数有误")
+		return
+	}
+
+	// 调用服务层，直接在底层对 MySQL 执行覆盖式刷数
+	ctx := c.Request.Context()
+	if err := api.videoService.RepairHistoricalDuration(ctx, req.ID, req.Duration); err != nil {
+		response.Fail(c, response.ERROR, err.Error())
+		return
+	}
+
+	response.Success(c, response.OK)
 }

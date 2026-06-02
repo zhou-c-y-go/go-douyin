@@ -170,12 +170,12 @@ func (s *UserService) UpdateUserInfoService(ctx context.Context, reqUser *pojo.U
 
 func (s *UserService) UpLoadHeaderImage(ctx context.Context, u *pojo.User, id int, file *multipart.FileHeader, fileObj multipart.File) error {
 	// 把文件上传到minio对应的桶中
-	ok := utils.UpLoadFile("userheaders", file.Filename, fileObj, file.Size)
+	ok := utils.UpLoadFile(ctx, "userheaders", file.Filename, fileObj, file.Size)
 	if !ok {
 		global.LogCtx(ctx).Error("上传到桶失败")
 		return errors.New("上传到桶失败")
 	}
-	headerUrl := utils.GetFileURL("userheaders", file.Filename, time.Hour*24*7)
+	headerUrl := utils.GetFileURL(ctx, "userheaders", file.Filename, time.Hour*24*7)
 	if headerUrl == "" {
 		global.LogCtx(ctx).Error("没有在桶中找到用户头像地址")
 		return errors.New("没有在桶中找到用户头像地址")

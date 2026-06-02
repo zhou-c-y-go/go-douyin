@@ -19,12 +19,12 @@ func Routers() *gin.Engine {
 	v1 := Router.Group("/api/v1/user")
 	v1.POST("/register", userController.Register)
 	v1.GET("/video/feed", videoController.GetFeedStream)
+	v1.PUT("/video/repair-duration", videoController.RepairDuration)
 	// 登录接口
 	v1.POST("/login", userController.Login)
 	authGroup := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
 	{
-		// 获取视频列表
-		authGroup.GET("/video/publish", videoController.UploadVideo)
+		authGroup.POST("/video/publish", videoController.UploadVideo)
 		// 个人主页接口 (这样写，JWTAuth 绝对在 GetUserProfile 之前执行！)
 		authGroup.GET("/profile", userController.GetUserProfile)
 		authGroup.PUT("/update", userController.UpdateUserInfo)
