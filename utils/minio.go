@@ -109,3 +109,75 @@ func EnsureBucketExists(ctx context.Context, bucketName string) error {
 
 	return nil
 }
+
+// GetUploadPresignedURL ── 🚀 v7：签发给前端的“无感直传黄金通行证”
+func GetUploadPresignedURL(ctx context.Context, bucketName string, objectName string, expires time.Duration) (string, error) {
+	// 调用 v7 独有的 PresignedUrl 方法，给前端生成一笔带有 15 分钟时效的直传专属密令
+	u, err := global.MinioClient.PresignedPutObject(ctx, bucketName, objectName, expires)
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MinIO v7] 生成直传签名通行证大翻车: %v", err)
+		return "", err
+	}
+	// 返回给前端一个可以直接用 axios.put 上传的完整安全 URL
+	return u.String(), nil
+}
+
+// InitMinioMultipartUpload ── 👑 v7引擎：去 MinIO 申请一个全局唯一的分片 UploadID 令牌
+func InitMinioMultipartUpload(ctx context.Context, bucketName string, objectName string) (string, error) {
+	// 将常规客户端提权为底层 Core 核心控制器
+	core := &minio.Core{Client: global.MinioClient}
+
+	// 初始化一个分片通道，第三个参数是标准的配置项
+	uploadID, err := core.NewMultipartUpload(ctx, bucketName, objectName, minio.PutObjectOptions{})
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MinIO Core] 开启低级分片上传初始化失败: %v", err)
+		return "", err
+	}
+	return uploadID, nil
+}
+
+// GetPresignedUploadPartURL ── 🚀 v7引擎：为指定的单个分片生成专属 PUT 预签名直传链接
+func GetPresignedUploadPartURL(ctx context.Context, bucketName string, objectName string, uploadID string, partNumber int, expires time.Duration) (string, error) {
+	// 大厂核心奥秘：分片直传本质上依然是 PUT 请求，但必须在 URL 后面强制追加携带 uploadId 和 partNumber 两个定位参数！
+	reqParams := make(url.Values)
+	reqParams.Set("uploadId", uploadID)
+	reqParams.Set("partNumber", strconv.Itoa(partNumber)) // 标记这是第几块肉块
+
+	// 调用我们之前验证通过的 PresignedUrl 底层通用函数生成链接
+	u, err := global.MinioClient.Presign(ctx, "PUT", bucketName, objectName, expires, reqParams)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+// MergeMinioMultipartUpload ── 🧱 v7低引擎：收网合并！后端全自动捞取已上架切片并在底层零拷贝拼接
+func MergeMinioMultipartUpload(ctx context.Context, bucketName string, objectName string, uploadID string) (string, error) {
+	core := &minio.Core{Client: global.MinioClient}
+
+	// 🎯 降维打击黑魔法：因为宝宝前端没有发 Parts 过来，后端直接调用 ListObjectParts 主动向 MinIO 索要这 10 个切片的实际落盘情况
+	listResult, err := core.ListObjectParts(ctx, bucketName, objectName, uploadID, 0, 1000)
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MinIO Core] 收网前主动扫描分片集群大翻车: %v", err)
+		return "", err
+	}
+
+	// 将扫描到的 ObjectPart 完美转换为 AWS S3 协议要求的 CompletePart 契约形态
+	var completeParts []minio.CompletePart
+	for _, p := range listResult.ObjectParts {
+		completeParts = append(completeParts, minio.CompletePart{
+			ETag:       p.ETag,
+			PartNumber: p.PartNumber,
+		})
+	}
+
+	// 最终收网：命令 MinIO 在存储层执行零拷贝的宏伟合并！
+	uploadInfo, err := core.CompleteMultipartUpload(ctx, bucketName, objectName, uploadID, completeParts, minio.PutObjectOptions{})
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MinIO Core] 最后的总并网组装大崩溃: %v", err)
+		return "", err
+	}
+
+	// 返回成功合并后的对象名
+	return uploadInfo.Key, nil
+}
