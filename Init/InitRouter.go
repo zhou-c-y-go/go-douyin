@@ -29,6 +29,10 @@ func Routers() *gin.Engine {
 		authGroup.GET("/profile", userController.GetUserProfile)
 		authGroup.PUT("/update", userController.UpdateUserInfo)
 		authGroup.POST("/avatar", userController.UploadHeaderImage)
+		authGroup.POST("/video/get-presigned-url", videoController.GetPresignedUploadURL)
+		authGroup.POST("/video/init-multipart", videoController.InitMultipart)
+		authGroup.POST("/video/complete-multipart", videoController.CompleteMultipart)
+		authGroup.GET("/video/user/list", videoController.GetUserVideoList)
 	}
 	// 管理员端口
 	//v2 := Router.Group("/admin").Use(middleware.CasbinController())
