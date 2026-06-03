@@ -223,3 +223,67 @@ func (s *VideoService) CompleteMultipartVideoService(ctx context.Context, upload
 	}(detachedCtx, videoEntity.ID) //
 	return nil
 }
+
+// GetUserVideoListService ── 👑 接入动态 Redis 缓存的个人作品集装配业务
+func (s *VideoService) GetUserVideoListService(ctx context.Context, targetUserID int64) ([]response.VideoVO, error) {
+	// 🎯 核心微操：针对不同的创作者，孵化出独一无二的专属内存 Key
+	cacheKey := fmt.Sprintf("UserVideoList:%d", targetUserID)
+	// 1. 探针雷达优先拦截内存，击中则 切流返回
+	cachedData, err := global.GVA_REDIS.Get(ctx, cacheKey).Result()
+	if err == nil && cachedData != "" {
+		var cachedVOs []response.VideoVO
+		if json.Unmarshal([]byte(cachedData), &cachedVOs) == nil {
+			global.LogCtx(ctx).Infof("⚡ [Redis] 成功击中创作者 [%d] 的个人主页作品集缓存！", targetUserID)
+			return cachedVOs, nil
+		}
+	}
+
+	// 2. 未命中兜底：回源持久层去磁盘上找数据
+	global.LogCtx(ctx).Warnf("⚠️ [Redis] 创作者 [%d] 个人缓存穿透，正在回源 MySQL 补货...", targetUserID)
+	pojoVideos, err := s.videoRepo.GetVideosByAuthorID(ctx, targetUserID)
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MySQL] 捞取用户作品集发生毁灭性崩溃: %v", err)
+		return nil, err
+	}
+
+	// 3. 开始拼装精美的社交 VO 实体（复用主页的 AuthorInfo 结构，方便前端组件完美渲染）
+	// 顺手捞取一次作者的基础卡片（优先走 Redis 动态哈希）
+	var author pojo.User
+	userKey := fmt.Sprintf("UserProfile:%d", targetUserID)   //
+	_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author) //
+	if author.ID == 0 {
+		global.GVA_DB.First(&author, targetUserID) //
+	}
+
+	videoVOs := make([]response.VideoVO, 0, len(pojoVideos)) //
+	for _, v := range pojoVideos {
+		vo := response.VideoVO{ //
+			ID:            v.ID,            //
+			Title:         v.Title,         //
+			VideoUrl:      v.VideoUrl,      //
+			CoverUrl:      v.CoverUrl,      //
+			Duration:      v.Duration,      //
+			LikeCount:     v.LikeCount,     //
+			FavoriteCount: v.FavoriteCount, //
+			CreatedAt:     v.CreatedAt,     //
+			Tags:          v.Tags,          //
+			Author: response.AuthorInfo{ //
+				ID:        author.ID,        //
+				Username:  author.Username,  //
+				Avatar:    author.HeadImg,   //
+				Signature: author.Signature, //
+			},
+		}
+		videoVOs = append(videoVOs, vo) //
+	}
+
+	// 4. 将装配好的 VO 数组送回 Redis，设置10分钟弹性时效
+	if len(videoVOs) > 0 {
+		jsonData, err := json.Marshal(videoVOs)
+		if err == nil {
+			_ = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Minute).Err() //
+		}
+	}
+
+	return videoVOs, nil
+}
