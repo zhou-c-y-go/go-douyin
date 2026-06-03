@@ -213,3 +213,25 @@ func (api *VideoController) CompleteMultipart(c *gin.Context) {
 
 	response.Success(c, response.OK) // 返回 1 成功暗号！
 }
+
+// GetUserVideoList ── 🎯 对应前端：request.get('/video/user/list?user_id=xxx')
+func (api *VideoController) GetUserVideoList(c *gin.Context) {
+	// 1. 扒出 Query 里的目标用户 ID
+	userIDStr := c.Query("user_id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil || targetUserID <= 0 {
+		response.Fail(c, response.ERROR, "非法的查阅用户对象")
+		return
+	}
+
+	// 2. 传唤服务层起飞
+	ctx := c.Request.Context()
+	videoVOs, err := api.videoService.GetUserVideoListService(ctx, targetUserID)
+	if err != nil {
+		response.Fail(c, response.ERROR, "无法获取该创作者的作品集")
+		return
+	}
+
+	// 3. 抛投契约大数组
+	response.Success(c, videoVOs)
+}
