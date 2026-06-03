@@ -80,6 +80,45 @@ func (s *VideoService) UploadVideoService(ctx context.Context, title string, tag
 	return nil
 }
 
+func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, error) {
+	cacheKey := "GlobalFeedCache"
+
+	// 1. 优先拦截并捕获 Redis 内存中的缓存
+	cachedData, err := global.GVA_REDIS.Get(ctx, cacheKey).Result()
+	if err == nil && cachedData != "" {
+		// 反序列化 JSON 字符串
+		var cachedVideos []pojo.Video
+		if json.Unmarshal([]byte(cachedData), &cachedVideos) == nil {
+			global.LogCtx(ctx).Infof("[Redis Cache] 内存完美击中！成功拦截并分流了本次 Feed 请求")
+			return cachedVideos, nil
+		}
+	}
+	// 2. 🕳️ 穿透/未命中兜底：如果 Redis 没捞到，说明是冷数据，老老实实回源 MySQL
+	global.LogCtx(ctx).Warnln("⚠[Redis Cache] 发生缓存穿透/失效！正在紧急回源 MySQL 捞取新鲜流...")
+	videos, err := s.videoRepo.GetVideosForFeed(ctx, time.Now(), 4)
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MySQL] 回源查询基础视频流发生毁灭性崩溃: %v", err)
+		return nil, err
+	}
+
+	// 3. 将新获取的 MySQL 数组序列化成 JSON，回填给 Redis
+	if len(videos) > 0 {
+		jsonData, err := json.Marshal(videos)
+		if err == nil {
+			// 设置过期时间（TTL），这里设置 10 分钟弹性缓冲区
+			// 配合 time.Duration，防范僵尸脏数据长期霸占内存
+			err = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Minute).Err()
+			if err != nil {
+				global.LogCtx(ctx).Errorw("🔥 [Redis] 回填 Feed 缓存至内存阵列失败", "err", err)
+			} else {
+				global.LogCtx(ctx).Infoln("✅ [Redis] Feed 缓存已成功并网回填，后续流量正式进入高速公路！")
+			}
+		}
+	}
+
+	return videos, nil
+}
+
 // GetFeedStreamService ── ✅ 高性能 Feed 流拼装业务
 func (s *VideoService) GetFeedStreamService(ctx context.Context, currentUserID int64) ([]response.VideoVO, error) {
 	// 1. 调用持久层捞取最新发布的时间线原始视频（此处默认限流 5 条）
