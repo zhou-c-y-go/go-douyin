@@ -182,3 +182,44 @@ func (s *VideoService) RepairHistoricalDuration(ctx context.Context, videoID int
 	global.LogCtx(ctx).Infof("✅ [Repair] 历史数据清洗成功！视频 [%d] 时长已被修正为 %d 秒", videoID, duration)
 	return nil
 }
+
+// CompleteMultipartVideoService ── 👑 工业级闭环：分片合并 ＋ 数据库物理落盘 ＋ 缓存一致性自愈防御
+func (s *VideoService) CompleteMultipartVideoService(ctx context.Context, uploadID, objectName, coverName, title, tags string, duration int64, authorID int64) error {
+
+	// 1. 调用工具层底打，命令 MinIO 引擎在底层迅速拼装碎片视频
+	_, err := utils.MergeMinioMultipartUpload(ctx, "videos", objectName, uploadID)
+	if err != nil {
+		return errors.New("多媒体切片组装失败，存储通道发生硬熔断")
+	}
+
+	// 2. 借助我们已有的雷达，帮视频和封面海报计算出带有时效的公网高速下载 URL
+	videoUrl := utils.GetFileURL(ctx, "videos", objectName, time.Hour*24*7) //
+	coverUrl := utils.GetFileURL(ctx, "covers", coverName, time.Hour*24*7)  //
+
+	// 3. 规整核心实体，回源持久化层砸进 MySQL
+	videoEntity := &pojo.Video{
+		Title:         title,         //
+		AuthorID:      authorID,      // 锁死当前发帖人
+		VideoUrl:      videoUrl,      //
+		CoverUrl:      coverUrl,      //
+		Duration:      int(duration), // 注入本地前置雷达捕获的精准秒数
+		LikeCount:     0,             //
+		FavoriteCount: 0,             //
+		Tags:          tags,          //
+	}
+	if err := s.videoRepo.CreateVideo(ctx, videoEntity); err != nil { //
+		return errors.New("视频记录并网入库失败") //
+	}
+
+	// 4. 🔥 数据一致性防御大闸门：既然有尊贵的新作品发布了，全自动静默擦除老旧的首页 Feed 缓存区！
+	_ = global.GVA_REDIS.Del(ctx, "GlobalFeedCache").Err()
+	global.LogCtx(ctx).Infoln("🧹 [Cache Eviction] 直传合并成功，已全自动清空老旧 Redis 首页大 Feed 缓存层！")
+
+	// 5. 高并发异步埋点：把生成的视频自增 ID 抛投给后台协程，无感推入全局 Redis 推荐池
+	detachedCtx := context.WithoutCancel(ctx)      //
+	go func(traceCtx context.Context, vid int64) { //
+		poolKey := "GlobalVideoPool"                            //
+		_ = global.GVA_REDIS.SAdd(traceCtx, poolKey, vid).Err() //
+	}(detachedCtx, videoEntity.ID) //
+	return nil
+}
