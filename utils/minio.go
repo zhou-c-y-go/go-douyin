@@ -4,9 +4,10 @@ import (
 	"Go_Project/global"
 	"context"
 	"fmt"
-	"github.com/minio/minio-go/v7" // 👑 唯一种姓：只认纯正的 v7 绝对路径，彻底轰碎分裂症！
+	"github.com/minio/minio-go/v7"
 	"io"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -94,7 +95,7 @@ func EnsureBucketExists(ctx context.Context, bucketName string) error {
 		return err
 	}
 
-	// 2. 顺水推舟：发现漏网之鱼，原地用 v7 配置项进行紧急孵化
+	// 2. 顺水推舟：发现漏网之鱼，原地用 v7 配置项进行紧急创造
 	if !exists {
 		global.LogCtx(ctx).Warnf("⚠️ [MinIO v7] 监测到核心存储桶 [%s] 居然不存在！正在启动全自动并网逻辑...", bucketName)
 
