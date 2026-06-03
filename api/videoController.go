@@ -95,8 +95,6 @@ func (api *VideoController) GetFeedStream(c *gin.Context) {
 		response.Fail(c, response.ERROR, "无法获取推荐视频流")
 		return
 	}
-
-	// 完美对齐大厂契约：返回 code:1 和组装好的豪华 VO 数组！
 	response.Success(c, videoVOs)
 }
 
