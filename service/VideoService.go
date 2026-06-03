@@ -7,6 +7,7 @@ import (
 	"Go_Project/global"
 	"Go_Project/utils"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"mime/multipart"
@@ -122,7 +123,7 @@ func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, e
 // GetFeedStreamService ── ✅ 高性能 Feed 流拼装业务
 func (s *VideoService) GetFeedStreamService(ctx context.Context, currentUserID int64) ([]response.VideoVO, error) {
 	// 1. 调用持久层捞取最新发布的时间线原始视频（此处默认限流 5 条）
-	pojoVideos, err := s.videoRepo.GetVideosForFeed(ctx, time.Now(), 4)
+	pojoVideos, err := s.GetVideoFeedService(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +215,8 @@ func (s *VideoService) CompleteMultipartVideoService(ctx context.Context, upload
 	// 4. 🔥 数据一致性防御大闸门：既然有尊贵的新作品发布了，全自动静默擦除老旧的首页 Feed 缓存区！
 	_ = global.GVA_REDIS.Del(ctx, "GlobalFeedCache").Err()
 	global.LogCtx(ctx).Infoln("🧹 [Cache Eviction] 直传合并成功，已全自动清空老旧 Redis 首页大 Feed 缓存层！")
-
+	userCacheKey := fmt.Sprintf("UserVideoList:%d", authorID)
+	_ = global.GVA_REDIS.Del(ctx, userCacheKey).Err()
 	// 5. 高并发异步埋点：把生成的视频自增 ID 抛投给后台协程，无感推入全局 Redis 推荐池
 	detachedCtx := context.WithoutCancel(ctx)      //
 	go func(traceCtx context.Context, vid int64) { //
