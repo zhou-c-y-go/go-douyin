@@ -121,3 +121,95 @@ func (api *VideoController) RepairDuration(c *gin.Context) {
 
 	response.Success(c, response.OK)
 }
+
+// GetPresignedUploadURL ── 🎯 对应前端：request.post('/video/get-presigned-url')
+func (api *VideoController) GetPresignedUploadURL(c *gin.Context) {
+	var req struct {
+		Bucket     string `json:"bucket" binding:"required"`
+		ObjectName string `json:"object_name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ERROR, "参数有误")
+		return
+	}
+
+	ctx := c.Request.Context()
+	// 签发 15 分钟时效的直传专属通行证
+	urlStr, err := utils.GetUploadPresignedURL(ctx, req.Bucket, req.ObjectName, 15*time.Minute) //
+	if err != nil {
+		response.Fail(c, response.ERROR, "无法孵化直传通行证")
+		return
+	}
+
+	response.Success(c, gin.H{"url": urlStr})
+}
+
+// InitMultipart ── 🎯 对应前端：request.post('/video/init-multipart')
+func (api *VideoController) InitMultipart(c *gin.Context) {
+	var req struct {
+		ObjectName string `json:"object_name" binding:"required"`
+		ChunkCount int    `json:"chunk_count" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ERROR, "初始化参数有误")
+		return
+	}
+
+	ctx := c.Request.Context()
+	// 1. 去 MinIO 申请一个本次上传唯一的 UploadID 大令牌
+	uploadID, err := utils.InitMinioMultipartUpload(ctx, "videos", req.ObjectName)
+	if err != nil {
+		response.Fail(c, response.ERROR, "MinIO 桶分片链路建立失败")
+		return
+	}
+
+	// 2. 顺着前端切出来的 ChunkCount 数量，通过循环给每一块分片批量生成独一无二的预签名直传链接！
+	partURLs := make([]string, req.ChunkCount)
+	for i := 1; i <= req.ChunkCount; i++ {
+		// 分片序列号从 1 开始累加
+		partURL, err := utils.GetPresignedUploadPartURL(ctx, "videos", req.ObjectName, uploadID, i, 30*time.Minute)
+		if err != nil {
+			response.Fail(c, response.ERROR, "批量孵化分片链接遭遇大出轨")
+			return
+		}
+		partURLs[i-1] = partURL
+	}
+
+	// 3. 将大厂大礼包原封不动秒级甩回给前端
+	response.Success(c, gin.H{
+		"upload_id": uploadID,
+		"urls":      partURLs,
+	})
+}
+
+// CompleteMultipart ── 🎯 对应前端：request.post('/video/complete-multipart')
+func (api *VideoController) CompleteMultipart(c *gin.Context) {
+	// JWT 搜身安全提权，锁死操作人
+	claimInterface, _ := c.Get("claim")              //
+	claims := claimInterface.(*request.CustomClaims) //
+	authorID := claims.Id                            //
+
+	var req struct {
+		UploadID   string `json:"upload_id" binding:"required"`
+		ObjectName string `json:"object_name" binding:"required"`
+		CoverName  string `json:"cover_name" binding:"required"`
+		Title      string `json:"title" binding:"required"`
+		Tags       string `json:"tags"`
+		Duration   int64  `json:"duration"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, response.ERROR, "合并入库校验单据缺失")
+		return
+	}
+
+	ctx := c.Request.Context()
+	global.LogCtx(ctx).Infof("🧱 [Controller] 收到分片收网指令！准备为用户 [%d] 合并大作: %s", authorID, req.Title)
+
+	// 传唤 Service 服务层，开启“合并 ＋ 落盘 MySQL ＋ 缓存一致性擦除”豪华套餐
+	if err := api.videoService.CompleteMultipartVideoService(ctx, req.UploadID, req.ObjectName, req.CoverName, req.Title, req.Tags, req.Duration, authorID); err != nil {
+		response.Fail(c, response.ERROR, err.Error())
+		return
+	}
+
+	response.Success(c, response.OK) // 返回 1 成功暗号！
+}
