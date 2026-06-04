@@ -197,3 +197,30 @@ func (api *UserController) UploadHeaderImage(c *gin.Context) {
 		response.Success(c, response.OK)
 	}
 }
+
+// GetPublicUserInfo ── 🌐 对应前端：request.get('/user/info?id=xxx')
+// 这是一个纯粹的公开大闸门，只认 URL 里的 id，不查 JWT！
+func (s *UserController) GetPublicUserInfo(c *gin.Context) {
+	// 1. 抓取 URL 上挂载的目标创作者 ID
+	idStr := c.Query("id")
+	targetId, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || targetId <= 0 {
+		response.Fail(c, response.ERROR, "无法锁定该创作者的坐标")
+		return
+	}
+
+	ctx := c.Request.Context()
+	userService := service.UserService{} // 实例化你的用户服务
+
+	// 2. 传唤服务层起飞（咱们复用你原有的 GetUserProfileService 即可，只要不传敏感信息就行）
+	// 注意：因为是看别人，所以 username 我们可以传空字符串，让底层自己查
+	userProfile, err := userService.GetUserProfileService(ctx, targetId, "")
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [Controller] 捞取创作者 [%d] 公开名片失败: %v", targetId, err)
+		response.Fail(c, response.ERROR, "该创作者可能已注销或隐藏了空间")
+		return
+	}
+
+	// 3. 向前端倾泻数据洪流
+	response.Success(c, userProfile)
+}
