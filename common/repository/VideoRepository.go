@@ -55,3 +55,14 @@ func (r *VideoRepository) GetVideosByAuthorID(ctx context.Context, authorID int6
 	}
 	return videos, nil
 }
+
+// GetVideoByID ── 🔍 物理单点捞取：精确锁定单个视频大屏记录
+func (r *VideoRepository) GetVideoByID(ctx context.Context, id int64) (*pojo.Video, error) {
+	var video pojo.Video
+	// 用 First 确保只查一条，自带 Limit 1 极致性能
+	err := global.GVA_DB.WithContext(ctx).Where("id = ?", id).First(&video).Error
+	if err != nil {
+		return nil, err
+	}
+	return &video, nil
+}
