@@ -95,17 +95,29 @@ func EnsureBucketExists(ctx context.Context, bucketName string) error {
 		return err
 	}
 
-	// 2. 顺水推舟：发现漏网之鱼，原地用 v7 配置项进行紧急创造
+	// 2. 顺水推舟：发现漏网之鱼，原地用 v7 配置项进行紧急孵化
 	if !exists {
-		global.LogCtx(ctx).Warnf("⚠️ [MinIO v7] 监测到核心存储桶 [%s] 居然不存在！正在启动全自动并网逻辑...", bucketName)
+		global.LogCtx(ctx).Warnf("⚠️ [MinIO v7] 监测到核心存储桶 [%s] 不存在！正在启动全自动建桶与公网策略并网...", bucketName)
 
-		// 🎯 核心升级：改用 v7 的 Options 模式建桶
+		// A. 建立空桶
 		err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: "us-east-1"})
 		if err != nil {
 			global.LogCtx(ctx).Errorf("❌ [MinIO v7] 紧急创建桶 [%s] 彻底失败: %v", bucketName, err)
 			return err
 		}
-		global.LogCtx(ctx).Infof("✅ [MinIO v7] 核心存储桶 [%s] 已全自动初始化成功，安全通道正式放行！", bucketName)
+
+		// B. 🎯 核心补漏：建桶后，必须立刻强行注入大厂标准的 Public Read 策略！
+		policyJSON := fmt.Sprintf(`{
+		"Version": "2012-10-17",
+		"Statement": [
+			{"Effect": "Allow","Principal": {"AWS": ["*"]},"Action": ["s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"],"Resource": ["arn:aws:s3:::%s"]},
+			{"Effect": "Allow","Principal": {"AWS": ["*"]},"Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"],"Resource": ["arn:aws:s3:::%s/*"]}
+		]
+	}`, bucketName, bucketName)
+
+		_ = minioClient.SetBucketPolicy(ctx, bucketName, policyJSON)
+
+		global.LogCtx(ctx).Infof("✅ [MinIO v7] 核心存储桶 [%s] 已创建并成功打通公网 Read 权限！", bucketName)
 	}
 
 	return nil
@@ -181,4 +193,19 @@ func MergeMinioMultipartUpload(ctx context.Context, bucketName string, objectNam
 
 	// 返回成功合并后的对象名
 	return uploadInfo.Key, nil
+}
+
+// CleanExpiredURL ── 🔪 洗数神器：精准斩断 URL 后面拖带的所有过期签名参数
+func CleanExpiredURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+	// 利用 Go 原生的 url 解析器
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return rawURL // 如果解析失败，说明可能本来就是干净的，原样返回
+	}
+	// 🎯 核心微操：只提取 协议(Scheme) + 域名(Host) + 路径(Path)
+	// 彻底丢弃 u.RawQuery（即 ? 后面的所有乱七八糟的参数）
+	return u.Scheme + "://" + u.Host + u.Path
 }
