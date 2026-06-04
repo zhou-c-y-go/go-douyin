@@ -289,3 +289,54 @@ func (s *VideoService) GetUserVideoListService(ctx context.Context, targetUserID
 
 	return videoVOs, nil
 }
+
+// GetVideoDetailService ── 👑 视频全景视图：单体信息 + 社交卡片 + 千人千面状态装配
+func (s *VideoService) GetVideoDetailService(ctx context.Context, videoID int64, currentUserID int64) (*response.VideoVO, error) {
+
+	// 1. 底层单点击穿：捞取视频基础流信息
+	video, err := s.videoRepo.GetVideoByID(ctx, videoID)
+	if err != nil {
+		global.LogCtx(ctx).Errorf("❌ [MySQL] 捞取单体视频 [%d] 遭遇滑铁卢: %v", videoID, err)
+		return nil, errors.New("视频可能已迷失")
+	}
+
+	// 2. 社交作者卡片并网：优先走 Redis 高速动态哈希
+	var author pojo.User
+	userKey := fmt.Sprintf("UserProfile:%d", video.AuthorID)
+	_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author)
+	if author.ID == 0 {
+		global.GVA_DB.First(&author, video.AuthorID)
+	}
+
+	// 3. 千人千面交互感知：如果当前有观众登录，帮他判断是否对这个视频点过赞
+	var isLike bool
+	// var isFavorite bool // 等后面宝宝开发了收藏功能，就在这里顺手查！
+	if currentUserID > 0 {
+		likeKey := fmt.Sprintf("UserLikes:%d", currentUserID)
+		// O(1) 复杂度极速探查 Redis 集合
+		isLike, _ = global.GVA_REDIS.SIsMember(ctx, likeKey, video.ID).Result()
+	}
+
+	// 4. 契约规整：打包成咱们前端 Vue 3 极度渴望的奢华 VO 对象
+	vo := &response.VideoVO{
+		ID:            video.ID,
+		Title:         video.Title,
+		VideoUrl:      video.VideoUrl, // 洗数后的纯净不失效链接会在这里大放异彩！
+		CoverUrl:      video.CoverUrl,
+		Duration:      video.Duration,
+		LikeCount:     video.LikeCount,
+		FavoriteCount: video.FavoriteCount,
+		CreatedAt:     video.CreatedAt,
+		Tags:          video.Tags,
+		Author: response.AuthorInfo{
+			ID:        author.ID,
+			Username:  author.Username,
+			Avatar:    author.HeadImg,
+			Signature: author.Signature,
+		},
+		IsLike:     isLike,
+		IsFavorite: false, // 占位，等待收藏功能的唤醒
+	}
+
+	return vo, nil
+}
