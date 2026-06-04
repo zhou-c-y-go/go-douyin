@@ -237,3 +237,35 @@ func (api *VideoController) GetUserVideoList(c *gin.Context) {
 	// 3. 抛投契约大数组
 	response.Success(c, videoVOs)
 }
+
+// GetVideoDetail ── 🎯 对应前端：request.get('/video/detail?id=xxx')
+func (api *VideoController) GetVideoDetail(c *gin.Context) {
+	// 1. 抓取 URL 上挂载的单据 id
+	idStr := c.Query("id")
+	videoID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil || videoID <= 0 {
+		response.Fail(c, response.ERROR, "视频通道定位损毁")
+		return
+	}
+
+	// 2. 🤫 探针微操：尝试在暗中捕获访问者的真实身份
+	// 因为这是公开路由，没登录也能看，所以 default userId 是 0
+	var currentUserID int64 = 0
+	if claimInterface, exists := c.Get("claim"); exists {
+		if claims, ok := claimInterface.(*request.CustomClaims); ok {
+			currentUserID = claims.Id // 捕获成功，该观众已登录！
+		}
+	}
+
+	ctx := c.Request.Context()
+
+	// 3. 传唤装配服务起飞
+	videoVO, err := api.videoService.GetVideoDetailService(ctx, videoID, currentUserID)
+	if err != nil {
+		response.Fail(c, response.ERROR, err.Error())
+		return
+	}
+
+	// 4. 向前端倾泻数据洪流
+	response.Success(c, videoVO)
+}
