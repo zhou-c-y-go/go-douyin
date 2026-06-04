@@ -9,6 +9,7 @@ import (
 
 var userController api.UserController
 var videoController = api.VideoController{}
+var commentController api.CommentController
 
 func Routers() *gin.Engine {
 	Router := gin.Default()
@@ -20,19 +21,23 @@ func Routers() *gin.Engine {
 	v1.POST("/register", userController.Register)
 	v1.GET("/video/feed", videoController.GetFeedStream)
 	v1.PUT("/video/repair-duration", videoController.RepairDuration)
+	v1.GET("/user/info", userController.GetPublicUserInfo)
 	// 登录接口
 	v1.POST("/login", userController.Login)
+	// 视频详细信息
+	v1.GET("/video/detail", videoController.GetVideoDetail)
 	authGroup := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
 	{
-		authGroup.POST("/video/publish", videoController.UploadVideo)
-		// 个人主页接口 (这样写，JWTAuth 绝对在 GetUserProfile 之前执行！)
 		authGroup.GET("/profile", userController.GetUserProfile)
 		authGroup.PUT("/update", userController.UpdateUserInfo)
 		authGroup.POST("/avatar", userController.UploadHeaderImage)
 		authGroup.POST("/video/get-presigned-url", videoController.GetPresignedUploadURL)
+		authGroup.POST("/video/publish", videoController.UploadVideo)
 		authGroup.POST("/video/init-multipart", videoController.InitMultipart)
 		authGroup.POST("/video/complete-multipart", videoController.CompleteMultipart)
 		authGroup.GET("/video/user/list", videoController.GetUserVideoList)
+		authGroup.GET("/comment/tree", commentController.GetVideoCommentTree)
+		authGroup.POST("/comment", commentController.CreateComment)
 	}
 	// 管理员端口
 	//v2 := Router.Group("/admin").Use(middleware.CasbinController())
