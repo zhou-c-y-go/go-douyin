@@ -6,4 +6,5 @@ type Configs struct {
 	Redis  Redis  `json:"redis" yaml:"redis"`
 	Minio  Minio  `json:"minio" yaml:"minio"`
 	System System `json:"system" yaml:"system"`
+	Kafka  Kafka  `json:"kafka" yaml:"kafka"`
 }
