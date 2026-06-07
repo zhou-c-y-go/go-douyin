@@ -66,6 +66,6 @@ func main() {
 	log.Println("🔄 正在向 Kafka 发送终止信号...")
 	cancel()
 	// 稍微等一下让 Kafka 把文件句柄写回硬盘，防止数据损坏
-	time.Sleep(1 * time.Second)
+	wg.Wait()
 	log.Println("🏁 所有人全部安全下线，主程序退出。")
 }
