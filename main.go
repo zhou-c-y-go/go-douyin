@@ -14,13 +14,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
 
 func main() {
-	global.GVA_VP = core.Viper() // 启动viper(配置读取器)
-	_ = global.GVA_VP
+	_ = core.Viper() // 启动viper(配置读取器)
 	logger.Init()
 	Init.InitMinio()
 	global.GVA_DB = Init.GormMySQL()
@@ -28,9 +28,9 @@ func main() {
 	// 1. 声明全局的可取消上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var wg sync.WaitGroup
 	// 2. 同步异步拉起 Kafka
-	Init.InitKafka(ctx)
-
+	Init.Kafka(ctx, &wg)
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		err := v.RegisterValidation("verifyMobileFormat", utils.VerifyMobileFormat)
 		if err != nil {
