@@ -103,14 +103,14 @@ func (s *UserController) Login(c *gin.Context) {
 
 // GetUserProfile 获取个人空间所需的信息
 func (s *UserController) GetUserProfile(c *gin.Context) {
-	// 1. 【第一层 - JWT】从上下文中获取 jwt.go 解析出的 claims
+	// 1. 【第一层 - JWT】从上下文中获取 JWT.go 解析出的 claims
 	claimInterface, exists := c.Get("claim")
 	if !exists {
 		response.Fail(c, response.ERROR, "获取jwt失败")
 		return
 	}
 
-	// 断言为你在 jwt.go 中定义的 *request.CustomClaims
+	// 断言为你在 JWT.go 中定义的 *request.CustomClaims
 	claims, ok := claimInterface.(*request.CustomClaims)
 	if !ok {
 		response.Fail(c, response.ERROR, "系统内部错误：JWT 结构异常")

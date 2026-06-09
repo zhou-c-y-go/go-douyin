@@ -62,7 +62,7 @@ func main() {
 	} else {
 		log.Println("✅ [Success] Gin Web 服务已安全关闭.")
 	}
-	// 🚀 第二步：触发 cancel()，此时 initKafka.go 里的 <-ctx.Done() 会立刻收到通知
+	// 🚀 第二步：触发 cancel()，此时 InitKafka.go 里的 <-ctx.Done() 会立刻收到通知
 	log.Println("🔄 正在向 Kafka 发送终止信号...")
 	cancel()
 	// 稍微等一下让 Kafka 把文件句柄写回硬盘，防止数据损坏
