@@ -15,4 +15,5 @@ type VideoVO struct {
 	IsLike        bool       `json:"is_like"`     // 核心痛点：当前刷视频的登录用户，有没有给该视频点赞过？
 	IsFavorite    bool       `json:"is_favorite"` // 当前登录用户，有没有收藏过该视频？
 	Tags          string     `json:"tags"`
+	TargetType    string     `json:"target_type"`
 }

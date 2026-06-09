@@ -104,3 +104,54 @@ func JWTAuth() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func JWTAuthOptional() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.Request.Header.Get("Authorization")
+		if authHeader == "" {
+			// 探针 1
+			global.LogCtx(c).Warnln("🛡️ [软鉴权探针] 请求头里空空如也，直接降级为游客")
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if !(len(parts) == 2 && parts[0] == "Bearer") {
+			// 探针 2
+			global.LogCtx(c).Warnln("🛡️ [软鉴权探针] Token 格式不是 Bearer 规范，降级为游客")
+			c.Next()
+			return
+		}
+
+		token := strings.TrimSpace(parts[1])
+		j := utils.NewJWT()
+		claims, err := j.ParseToken(token)
+		if err != nil {
+			// 探针 3
+			global.LogCtx(c).Errorw("🛡️ [软鉴权探针] Token 解析硬性流产了！", "err", err)
+			c.Next()
+			return
+		}
+
+		redisKey := fmt.Sprintf("UserToken:%d", claims.Id)
+		cachedToken, err := global.GVA_REDIS.Get(c.Request.Context(), redisKey).Result()
+		if err != nil {
+			// 探针 4
+			global.LogCtx(c).Errorw("🛡️ [软鉴权探针] Redis 账本里查无此 Token 或异常", "err", err)
+			c.Next()
+			return
+		}
+
+		if cachedToken != token {
+			// 探针 5
+			global.LogCtx(c).Warnln("🛡️ [软鉴权探针] 发现单点登录冲突，被其他设备顶号了，降级为游客")
+			c.Next()
+			return
+		}
+
+		// 🎯 只有冲破以上所有重围，才有资格点亮这里！
+		global.LogCtx(c).Infof("🛡️ [软鉴权探针] 🎉 恭喜！搜身成功，注入身份 ID: %d", claims.Id)
+		c.Set("claim", claims)
+		c.Next()
+	}
+}

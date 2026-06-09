@@ -23,7 +23,13 @@ func (api *CommentController) GetVideoCommentTree(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	tree, err := api.commentService.GetVideoCommentTreeService(ctx, videoID)
+	var currentUserID int64 = 0
+	if claimInterface, exists := c.Get("claim"); exists {
+		if claims, ok := claimInterface.(*request.CustomClaims); ok {
+			currentUserID = claims.Id
+		}
+	}
+	tree, err := api.commentService.GetVideoCommentTreeService(ctx, videoID, currentUserID)
 	if err != nil {
 		global.LogCtx(ctx).Errorf("❌ [Comment] 聚拢树状评论大翻车: %v", err)
 		response.Fail(c, response.ERROR, "评论区系统维护中")
@@ -56,11 +62,11 @@ func (api *CommentController) CreateComment(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 3. 传唤服务层起飞
-	if err := api.commentService.PublishCommentService(ctx, req.VideoID, userID, req.Content, req.ReplyToID); err != nil {
+	err := api.commentService.PublishCommentService(ctx, req.VideoID, userID, req.Content, req.ReplyToID)
+	if err != nil {
 		response.Fail(c, response.ERROR, err.Error())
 		return
 	}
-
 	// 4. 完美响应
-	response.Success(c, "神评论已上墙！")
+	response.Success(c, "Success")
 }

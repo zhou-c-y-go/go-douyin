@@ -256,7 +256,6 @@ func (api *VideoController) GetVideoDetail(c *gin.Context) {
 			currentUserID = claims.Id // 捕获成功，该观众已登录！
 		}
 	}
-
 	ctx := c.Request.Context()
 
 	// 3. 传唤装配服务起飞

@@ -10,6 +10,7 @@ import (
 var userController api.UserController
 var videoController = api.VideoController{}
 var commentController api.CommentController
+var likeController api.LikeController
 
 func Routers() *gin.Engine {
 	Router := gin.Default()
@@ -25,7 +26,7 @@ func Routers() *gin.Engine {
 	// 登录接口
 	v1.POST("/login", userController.Login)
 	// 视频详细信息
-	v1.GET("/video/detail", videoController.GetVideoDetail)
+	v1.GET("/video/detail", middleware.JWTAuthOptional(), videoController.GetVideoDetail)
 	authGroup := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
 	{
 		authGroup.GET("/profile", userController.GetUserProfile)
@@ -38,6 +39,7 @@ func Routers() *gin.Engine {
 		authGroup.GET("/video/user/list", videoController.GetUserVideoList)
 		authGroup.GET("/comment/tree", commentController.GetVideoCommentTree)
 		authGroup.POST("/comment", commentController.CreateComment)
+		authGroup.POST("/like", likeController.ToggleLike)
 	}
 	// 管理员端口
 	//v2 := Router.Group("/admin").Use(middleware.CasbinController())

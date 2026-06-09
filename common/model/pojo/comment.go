@@ -12,4 +12,5 @@ type Comment struct {
 	Path      string    `gorm:"type:varchar(255);index" json:"path"` // 你的核心亮点：物化路径（如 "1/3/"），利用前缀索引秒级拉取整树
 	ReplyToID int64     `gorm:"index;default:0" json:"reply_to_id"`  // 可选：仅仅为了前端直观展示“回复了谁”，不参与递归
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	LikeCount int64     `gorm:"default:0" json:"like_count"`
 }

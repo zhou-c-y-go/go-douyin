@@ -30,6 +30,7 @@ func GormMySQL() *gorm.DB {
 			&pojo.Admin{},
 			&pojo.Video{},   // 新增：视频表
 			&pojo.Comment{}, // 新增：评论表（带物化路径索引）
+			&pojo.LikeRecord{},
 		)
 		if err != nil {
 			fmt.Println("生成表失败")
