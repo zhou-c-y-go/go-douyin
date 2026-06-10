@@ -46,3 +46,30 @@ func (api *LikeController) ToggleLike(c *gin.Context) {
 		response.Success(c, gin.H{"is_liked": false})
 	}
 }
+
+// GetUserTotalLikeCountController ：统计用户点赞视频的数量
+func (api *LikeController) GetUserTotalLikeCountController(c *gin.Context) {
+	claimInterface, exists := c.Get("claim")
+	if !exists {
+		response.Fail(c, response.ERROR, "未登录")
+		return
+	}
+	claims := claimInterface.(*req.CustomClaims) // 精准对齐你的 request 包前缀
+	userID := claims.Id
+	count, err := api.likeService.GetUserTotalLikeCount(c, userID)
+	if err != nil {
+		global.LogCtx(c).Errorf("用户[%d]点赞视频数量获取失败", userID)
+		response.Fail(c, response.ERROR, err.Error())
+	} else {
+		response.Success(c, count)
+	}
+}
+
+func (api *LikeController) CalibrateVideoCounts(c *gin.Context) {
+	ctx := c.Request.Context()
+	if err := api.likeService.CalibrateVideoCounts(ctx); err != nil {
+		response.Fail(c, response.ERROR, err.Error())
+		return
+	}
+	response.Success(c, gin.H{"msg": "视频计数校准完成"})
+}
