@@ -20,8 +20,13 @@ type VideoService struct {
 }
 
 // UploadVideoService ── ✅ 视频+封面双 MinIO 落盘与多级缓存同步工厂
-func (s *VideoService) UploadVideoService(ctx context.Context, title string, tags string, videoFile, coverFile *multipart.FileHeader, videoObj, coverObj multipart.File, authorID int64, duration int64) error {
-
+func (s *VideoService) UploadVideoService(
+	ctx context.Context,
+	title string,
+	tags string,
+	videoFile, coverFile *multipart.FileHeader,
+	videoObj, coverObj multipart.File,
+	authorID, duration int64) error {
 	// 🎯 核心升级防线 1：在抛投视频前，确保 "videos" 桶稳如泰山
 	if err := utils.EnsureBucketExists(ctx, "videos"); err != nil {
 		global.LogCtx(ctx).Errorf("❌ [Service] 确保 videos 存储桶存在失败: %v", err)
@@ -67,22 +72,29 @@ func (s *VideoService) UploadVideoService(ctx context.Context, title string, tag
 
 	// 4. 高并发高可用埋点：异步推入 Redis 推荐池
 	detachedCtx := context.WithoutCancel(ctx)
-	go func(traceCtx context.Context, vid int64) {
-		poolKey := "GlobalVideoPool"
-		err := global.GVA_REDIS.SAdd(traceCtx, poolKey, vid).Err()
+	go func(traceCtx context.Context, vid int64, authorID int64) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		poolKey := "GlobalVideoPool" // todo:键名更改？
+		err := global.GVA_REDIS.SAdd(bgCtx, poolKey, vid).Err()
 		if err != nil {
-			global.LogCtx(traceCtx).Errorw("🔥 [Async] 推送新视频至 Redis 推荐池失败", "err", err)
+			global.LogCtx(bgCtx).Errorw("🔥 [Async] 推送新视频至 Redis 推荐池失败", "err", err)
 		} else {
-			global.LogCtx(traceCtx).Infof("🔥 [Async] 视频 [%d] 已成功并网全局 Redis 推荐池！", vid)
+			global.LogCtx(bgCtx).Infof("🔥 [Async] 视频 [%d] 已成功并网全局 Redis 推荐池！", vid)
 		}
-	}(detachedCtx, videoEntity.ID)
+		userCacheKey := fmt.Sprintf("UserVideoList:%d", authorID)
+		if err := global.GVA_REDIS.Del(bgCtx, userCacheKey).Err(); err != nil {
+			global.LogCtx(bgCtx).Errorw("删除用户作品集缓存失败", "userID", authorID, "err", err)
+		} else {
+			global.LogCtx(bgCtx).Infof("已清除用户 %d 的个人主页缓存", authorID)
+		}
+	}(detachedCtx, videoEntity.ID, authorID)
 
 	return nil
 }
 
 func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, error) {
 	cacheKey := "GlobalFeedCache"
-
 	// 1. 优先拦截并捕获 Redis 内存中的缓存
 	cachedData, err := global.GVA_REDIS.Get(ctx, cacheKey).Result()
 	if err == nil && cachedData != "" {
@@ -92,20 +104,19 @@ func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, e
 			return cachedVideos, nil
 		}
 	}
-
 	// 2. 🕳️ 穿透/未命中兜底：回源 MySQL
 	global.LogCtx(ctx).Warnln("⚠[Redis Cache] 发生缓存穿透/失效！正在紧急回源 MySQL 捞取新鲜流...")
+	// todo:分页查询每页设置，改为可配置的分页参数（如 limit, offset）
 	videos, err := s.videoRepo.GetVideosForFeed(ctx, time.Now(), 4)
 	if err != nil {
 		global.LogCtx(ctx).Errorf("❌ [MySQL] 回源查询基础视频流发生毁灭性崩溃: %v", err)
 		return nil, err
 	}
-
 	// 3. 将新获取的 MySQL 数组序列化成 JSON，回填给 Redis
 	if len(videos) > 0 {
 		jsonData, err := json.Marshal(videos)
 		if err == nil {
-			err = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Minute).Err()
+			err = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Second).Err()
 			if err != nil {
 				global.LogCtx(ctx).Errorw("🔥 [Redis] 回填 Feed 缓存至内存阵列失败", "err", err)
 			} else {
@@ -118,7 +129,9 @@ func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, e
 }
 
 // GetFeedStreamService ── ✅ 高性能 Feed 流拼装业务（升级版：消灭 N+1，完美融合最新点赞账本）
-func (s *VideoService) GetFeedStreamService(ctx context.Context, currentUserID int64) ([]response.VideoVO, error) {
+func (s *VideoService) GetFeedStreamService(
+	ctx context.Context,
+	currentUserID int64) ([]response.VideoVO, error) {
 	// 1. 调用持久层捞取最新发布的时间线原始视频
 	pojoVideos, err := s.GetVideoFeedService(ctx)
 	if err != nil {
@@ -175,7 +188,7 @@ func (s *VideoService) GetFeedStreamService(ctx context.Context, currentUserID i
 				Signature: author.Signature,
 			},
 			IsLike:     likedVideoMap[v.ID], // 🚀 完美对齐内存批量账本，彻底消除刷新熄灭 Bug！
-			IsFavorite: false,               // 收藏逻辑未来完全可以镜像同理并网
+			IsFavorite: likedVideoMap[v.ID], // 收藏逻辑未来完全可以镜像同理并网
 			Tags:       v.Tags,
 			TargetType: "video", // 宣告厂牌，让前端点赞组件盲抠抓取组件上下文
 		}
@@ -224,11 +237,15 @@ func (s *VideoService) CompleteMultipartVideoService(ctx context.Context, upload
 	}
 
 	// 4. 🔥 数据一致性防御大闸门：清除 Feed 缓存与作者作品集缓存
-	_ = global.GVA_REDIS.Del(ctx, "GlobalFeedCache").Err()
+	err = global.GVA_REDIS.Del(ctx, "GlobalFeedCache").Err()
+	if err != nil {
+		global.LogCtx(ctx).Errorw("[CompleteMultipartVideoService]:\t删除原来缓存失败", "Error", err)
+	}
 	global.LogCtx(ctx).Infoln("🧹 [Cache Eviction] 直传合并成功，已全自动清空老旧 Redis 首页大 Feed 缓存层！")
 	userCacheKey := fmt.Sprintf("UserVideoList:%d", authorID)
-	_ = global.GVA_REDIS.Del(ctx, userCacheKey).Err()
-
+	if err = global.GVA_REDIS.Del(ctx, userCacheKey).Err(); err != nil {
+		global.LogCtx(ctx).Warnw("删除缓存失败", "key", userCacheKey, "err", err)
+	}
 	// 5. 高并发异步埋点：推入全局 Redis 推荐池
 	detachedCtx := context.WithoutCancel(ctx)
 	go func(traceCtx context.Context, vid int64) {
@@ -264,20 +281,31 @@ func (s *VideoService) GetUserVideoListService(ctx context.Context, targetUserID
 	var author pojo.User
 	userKey := fmt.Sprintf("UserProfile:%d", targetUserID)
 	_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author)
-	if author.ID == 0 {
-		global.GVA_DB.First(&author, targetUserID)
+	if author.ID != 0 {
+		// 使用 HSet 批量设置，并设置过期时间
+		global.GVA_REDIS.HSet(ctx, userKey, "id", author.ID, "username", author.Username, "head_img", author.HeadImg, "signature", author.Signature)
+		global.GVA_REDIS.Expire(ctx, userKey, 24*time.Hour)
 	}
-
 	videoVOs := make([]response.VideoVO, 0, len(pojoVideos))
 	for _, v := range pojoVideos {
+		likeCountKey := fmt.Sprintf("Like:Count:video:%d", v.ID)
+		likeCount, _ := global.GVA_REDIS.Get(ctx, likeCountKey).Int64()
+		if likeCount == 0 {
+			likeCount = v.LikeCount
+		}
+		favoriteCountKey := fmt.Sprintf("Favorite:Count:video:%d", v.ID)
+		favCount, _ := global.GVA_REDIS.Get(ctx, favoriteCountKey).Int64()
+		if favCount == 0 {
+			favCount = v.FavoriteCount
+		}
 		vo := response.VideoVO{
 			ID:            v.ID,
 			Title:         v.Title,
 			VideoUrl:      v.VideoUrl,
 			CoverUrl:      v.CoverUrl,
 			Duration:      v.Duration,
-			LikeCount:     v.LikeCount,
-			FavoriteCount: v.FavoriteCount,
+			LikeCount:     likeCount,
+			FavoriteCount: favCount,
 			CreatedAt:     v.CreatedAt,
 			Tags:          v.Tags,
 			Author: response.AuthorInfo{
@@ -290,7 +318,6 @@ func (s *VideoService) GetUserVideoListService(ctx context.Context, targetUserID
 		}
 		videoVOs = append(videoVOs, vo)
 	}
-
 	// 4. 送回 Redis，设置 10 分钟弹性时效
 	if len(videoVOs) > 0 {
 		jsonData, err := json.Marshal(videoVOs)
@@ -319,28 +346,73 @@ func (s *VideoService) GetVideoDetailService(ctx context.Context, videoID int64,
 	if author.ID == 0 {
 		global.GVA_DB.First(&author, video.AuthorID)
 	}
+	// 点赞逻辑
 	likeCountKey := fmt.Sprintf("Like:Count:video:%d", videoID)
-	cacheCount, err := global.GVA_REDIS.Get(ctx, likeCountKey).Int64()
-	if err != nil {
-		cacheCount = video.LikeCount
-		global.GVA_REDIS.Set(ctx, likeCountKey, cacheCount, 24*time.Hour)
+	cacheLikeCount, likeErr := global.GVA_REDIS.Get(ctx, likeCountKey).Int64()
+	if likeErr != nil {
+		cacheLikeCount = video.LikeCount
+		global.GVA_REDIS.Set(ctx, likeCountKey, cacheLikeCount, 24*time.Hour)
+	}
+	// 收藏逻辑
+	favoriteCountKey := fmt.Sprintf("Favorite:Count:video:%d", videoID)
+	cacheFavoriteCount, likeErr := global.GVA_REDIS.Get(ctx, favoriteCountKey).Int64()
+	if likeErr != nil {
+		cacheFavoriteCount = video.FavoriteCount
+		global.GVA_REDIS.Set(ctx, favoriteCountKey, cacheFavoriteCount, 24*time.Hour)
 	}
 	// 3. 千人千面交互感知：升级为精准敲门 MySQL 新点赞明细表
 	var isLike = false
+	var isFavor = false
 	if currentUserID > 0 {
+		// 点赞逻辑
 		likeSetKey := fmt.Sprintf("Like:Set:video:%d", videoID)
-		exists, err := global.GVA_REDIS.SIsMember(ctx, likeSetKey, currentUserID).Result()
-		if err != nil {
-			isLike = exists
-		} else {
+		keyExists, err := global.GVA_REDIS.Exists(ctx, likeSetKey).Result()
+		if err != nil || keyExists == 0 {
+			// Redis 出错 或 key 不存在：降级到 MySQL
 			var count int64
 			global.GVA_DB.WithContext(ctx).Model(&pojo.LikeRecord{}).
 				Where("user_id = ? AND target_id = ? AND target_type = ? AND status = 1", currentUserID, videoID, "video").
 				Count(&count)
 			isLike = count > 0
+			if isLike {
+				go func() {
+					bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+					defer cancel()
+					if addErr := global.GVA_REDIS.SAdd(bgCtx, likeSetKey, currentUserID).Err(); addErr != nil {
+						global.LogCtx(bgCtx).Errorw("异步回填点赞集合失败", "err", addErr)
+					} else {
+						global.GVA_REDIS.Expire(bgCtx, likeSetKey, 24*time.Hour)
+					}
+				}()
+			}
+		} else {
+			// key 存在，直接判断成员
+			isLike, _ = global.GVA_REDIS.SIsMember(ctx, likeSetKey, currentUserID).Result()
 		}
-		if isLike {
-			global.GVA_REDIS.SAdd(ctx, likeSetKey, currentUserID)
+		// 收藏逻辑
+		favoriteSetKey := fmt.Sprintf("Favorite:Set:video:%d", videoID)
+		keyExists, err = global.GVA_REDIS.Exists(ctx, favoriteSetKey).Result()
+		if err != nil || keyExists == 0 {
+			// Redis 出错 或 key 不存在：降级到 MySQL
+			var count int64
+			global.GVA_DB.WithContext(ctx).Model(&pojo.FavoriteRecord{}).
+				Where("user_id = ? AND target_id = ? AND target_type = ? AND status = 1", currentUserID, videoID, "video").
+				Count(&count)
+			isFavor = count > 0
+			if isFavor {
+				go func() {
+					bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+					defer cancel()
+					if addErr := global.GVA_REDIS.SAdd(bgCtx, favoriteSetKey, currentUserID).Err(); addErr != nil {
+						global.LogCtx(bgCtx).Errorw("异步回填收藏集合失败", "err", addErr)
+					} else {
+						global.GVA_REDIS.Expire(bgCtx, favoriteSetKey, 24*time.Hour)
+					}
+				}()
+			}
+		} else {
+			// key 存在，直接判断成员
+			isFavor, _ = global.GVA_REDIS.SIsMember(ctx, favoriteSetKey, currentUserID).Result()
 		}
 	}
 	// 4. 契约规整：打包成我们前端 Vue 3 极度渴望的奢华 VO 对象
@@ -350,8 +422,8 @@ func (s *VideoService) GetVideoDetailService(ctx context.Context, videoID int64,
 		VideoUrl:      video.VideoUrl,
 		CoverUrl:      video.CoverUrl,
 		Duration:      video.Duration,
-		LikeCount:     video.LikeCount, // 承接底层原子计数器的行锁安全数字
-		FavoriteCount: video.FavoriteCount,
+		LikeCount:     cacheLikeCount, // 承接底层原子计数器的行锁安全数字
+		FavoriteCount: cacheFavoriteCount,
 		CreatedAt:     video.CreatedAt,
 		Tags:          video.Tags,
 		Author: response.AuthorInfo{
@@ -361,7 +433,7 @@ func (s *VideoService) GetVideoDetailService(ctx context.Context, videoID int64,
 			Signature: author.Signature,
 		},
 		IsLike:     isLike, // 精准回显状态，刷新坚决不灭！
-		IsFavorite: false,
+		IsFavorite: isFavor,
 		TargetType: "video",
 	}
 
