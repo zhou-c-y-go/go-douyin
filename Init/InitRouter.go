@@ -11,6 +11,7 @@ var userController api.UserController
 var videoController = api.VideoController{}
 var commentController api.CommentController
 var likeController api.LikeController
+var favoriteController api.FavoriteController
 
 func Routers() *gin.Engine {
 	Router := gin.Default()
@@ -25,21 +26,29 @@ func Routers() *gin.Engine {
 	v1.GET("/user/info", userController.GetPublicUserInfo)
 	// 登录接口
 	v1.POST("/login", userController.Login)
-	// 视频详细信息
-	v1.GET("/video/detail", middleware.JWTAuthOptional(), videoController.GetVideoDetail)
-	authGroup := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
+
+	Group1 := Router.Group("/api/v1/user").Use(middleware.JWTAuthOptional())
+	{ // 视频详细信息
+		Group1.GET("/video/detail", videoController.GetVideoDetail)
+	}
+	Group2 := Router.Group("/api/v1/user").Use(middleware.JWTAuth())
 	{
-		authGroup.GET("/profile", userController.GetUserProfile)
-		authGroup.PUT("/update", userController.UpdateUserInfo)
-		authGroup.POST("/avatar", userController.UploadHeaderImage)
-		authGroup.POST("/video/get-presigned-url", videoController.GetPresignedUploadURL)
-		authGroup.POST("/video/publish", videoController.UploadVideo)
-		authGroup.POST("/video/init-multipart", videoController.InitMultipart)
-		authGroup.POST("/video/complete-multipart", videoController.CompleteMultipart)
-		authGroup.GET("/video/user/list", videoController.GetUserVideoList)
-		authGroup.GET("/comment/tree", commentController.GetVideoCommentTree)
-		authGroup.POST("/comment", commentController.CreateComment)
-		authGroup.POST("/like", likeController.ToggleLike)
+		Group2.GET("/profile", userController.GetUserProfile)
+		Group2.PUT("/update", userController.UpdateUserInfo)
+		Group2.POST("/avatar", userController.UploadHeaderImage)
+		Group2.POST("/video/get-presigned-url", videoController.GetPresignedUploadURL)
+		Group2.POST("/video/publish", videoController.UploadVideo)
+		Group2.POST("/video/init-multipart", videoController.InitMultipart)
+		Group2.POST("/video/complete-multipart", videoController.CompleteMultipart)
+		Group2.GET("/video/user/list", videoController.GetUserVideoList)
+		Group2.GET("/comment/tree", commentController.GetVideoCommentTree)
+		Group2.POST("/comment", commentController.CreateComment)
+		Group2.POST("/like", likeController.ToggleLike)
+		Group2.POST("/favorite", favoriteController.ToggleFavorite)
+		// 点赞统计
+		Group2.GET("/like/total", likeController.GetUserTotalLikeCountController)
+		Group2.GET("/favorite/total", favoriteController.GetUserTotalFavoriteCountController)
+		Group2.POST("/calibrate", likeController.CalibrateVideoCounts)
 	}
 	// 管理员端口
 	//v2 := Router.Group("/admin").Use(middleware.CasbinController())
