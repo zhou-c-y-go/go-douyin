@@ -17,4 +17,5 @@ test/
 .env
 config.yaml
 总结.md
-minio-start.bat
+start.bat
+docker-compose.yaml
