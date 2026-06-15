@@ -1,0 +1,100 @@
+name: ${COMPOSE_PROJECT_NAME:-douyin-dev}
+
+services:
+  mysql:
+    image: mysql:${MYSQL_IMAGE_TAG:-8.0}
+    container_name: ${COMPOSE_PROJECT_NAME:-douyin-dev}-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      TZ: ${TZ:-Asia/Shanghai}
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - douyin_net
+
+  redis:
+    image: redis:${REDIS_IMAGE_TAG:-7-alpine}
+    container_name: ${COMPOSE_PROJECT_NAME:-douyin-dev}-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: ${TZ:-Asia/Shanghai}
+    command: >
+      sh -c 'if [ -n "$${REDIS_PASSWORD}" ]; then
+        redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}";
+      else
+        redis-server --appendonly yes;
+      fi'
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - douyin_net
+
+  minio:
+    image: minio/minio:${MINIO_IMAGE_TAG:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-douyin-dev}-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      TZ: ${TZ:-Asia/Shanghai}
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - douyin_net
+
+  kafka:
+    image: apache/kafka:${KAFKA_IMAGE_TAG:-4.0.0}
+    container_name: ${COMPOSE_PROJECT_NAME:-douyin-dev}-kafka
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_HOST:-127.0.0.1}:${KAFKA_PORT:-9092}
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "127.0.0.1:${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - douyin_net
+
+volumes:
+  mysql_data:
+  redis_data:
+  minio_data:
+  kafka_data:
+
+networks:
+  douyin_net:
+    driver: bridge
