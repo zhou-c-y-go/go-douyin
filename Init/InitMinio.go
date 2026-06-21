@@ -9,7 +9,7 @@ import (
 )
 
 func InitMinio() {
-	minioInfo := global.GLOB_CONFIG.Minio
+	minioInfo := global.GLOB_CONFIG.Storage
 	minioClient, err := minio.New(minioInfo.EndPoint, &minio.Options{
 		// 1. 🔑 凭证解耦：使用 NewStaticV4 将密钥对塞入凭证工厂（最后一个参数默认传空字符串 "" 即可）
 		Creds: credentials.NewStaticV4(minioInfo.AccessKeyID, minioInfo.SecretAccessKey, ""),

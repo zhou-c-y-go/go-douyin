@@ -10,7 +10,7 @@ import (
 
 func getKafkaBootstrapServer() string {
 	// 从 Viper 已经加载好的 global.GLOB_CONFIG 中读取 Kafka 参数
-	bootstrapServers := strings.TrimSpace(global.GLOB_CONFIG.Kafka.BootstrapServers)
+	bootstrapServers := strings.TrimSpace(global.GLOB_CONFIG.MQ.BootstrapServers)
 
 	if bootstrapServers == "" {
 		bootstrapServers = "127.0.0.1:9092"

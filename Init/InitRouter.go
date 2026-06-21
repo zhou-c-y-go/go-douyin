@@ -3,23 +3,44 @@ package Init
 import (
 	"Go_Project/api"
 	"Go_Project/common/middleware"
+	"Go_Project/common/repository"
+	"Go_Project/service"
 	"github.com/gin-gonic/gin"
 	"net/http"
 )
 
-var userController api.UserController
-var videoController = api.VideoController{}
-var commentController api.CommentController
-var likeController api.LikeController
-var favoriteController api.FavoriteController
-
 func Routers() *gin.Engine {
+	// 1. 初始化所有底层的持久化仓库 (MySQL / Redis 驱动被死死锁在这里面)
+	userRepo := repository.NewUserRepository()
+	videoRepo := repository.NewVideoRepository()
+	commentRepo := repository.NewCommentRepository()
+
+	// 2. 注入仓库，孵化出纯净的业务逻辑服务层 (跨模块并网在这里完成)
+	userService := service.NewUserService(userRepo)
+	videoService := service.NewVideoService(videoRepo, userRepo)       // video 依赖 user 模块拉作者信息
+	commentService := service.NewCommentService(commentRepo, userRepo) // comment 依赖 user 模块拉卡片信息
+
+	// 3. 注入服务层，孵化出绝对安全的控制层组件 (再无 Nil 导致的崩溃陷阱)
+	userController := api.NewUserController(userService)
+	videoController := api.NewVideoController(videoService)
+	commentController := api.NewCommentController(commentService)
+	// 1. 持久层基础设施落盘单例
+	likeRepo := repository.NewLikeRepository()
+	favRepo := repository.NewFavoriteRepository()
+
+	// 2. 注入 Repo，孵化业务逻辑服务层
+	likeService := service.NewLikeService(likeRepo)
+	favorService := service.NewFavorService(favRepo)
+
+	// 3. 注入服务层，孵化控制层控制器
+	likeController := api.NewLikeController(likeService)
+	favoriteController := api.NewFavoriteController(favorService)
 	Router := gin.Default()
 	Router.Use(middleware.CrosHandler())
 	Router.Use(middleware.TraceMiddleware())
 	Router.MaxMultipartMemory = 8 << 20 // 8 MiB
 	Router.StaticFS("../static/headImags", http.Dir("headImags"))
-	v1 := Router.Group("/api/v1/user")
+	v1 := Router.Group("/api/v1/user").Use(middleware.CrosHandler())
 	v1.POST("/register", userController.Register)
 	v1.GET("/video/feed", videoController.GetFeedStream)
 	v1.PUT("/video/repair-duration", videoController.RepairDuration)

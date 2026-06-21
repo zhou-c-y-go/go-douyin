@@ -4,38 +4,134 @@ import (
 	"Go_Project/common/model/pojo"
 	"Go_Project/global"
 	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/redis/go-redis/v9"
+	"strconv"
+	"time"
 )
 
-type CommentRepository struct{}
+// CommentRepository 评论领域持久化标准接口
+type CommentRepository interface {
+	CreateComment(ctx context.Context, comment *pojo.Comment) error
+	GetCommentByID(ctx context.Context, id int64) (*pojo.Comment, error)
+	GetCommentsByVideoID(ctx context.Context, videoID int64) ([]pojo.Comment, error)
+	UpdateCommentPath(ctx context.Context, id int64, path string) error
 
-// CreateComment ── 发表评论/回复
-func (r *CommentRepository) CreateComment(ctx context.Context, comment *pojo.Comment) error {
-	err := global.GVA_DB.WithContext(ctx).Create(comment).Error
-	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [DB] 评论写入失败: %v", err)
-		return err
-	}
-	return nil
+	// Cache 缓存自治防线
+	GetCommentsCache(ctx context.Context, videoID int64) ([]pojo.Comment, bool, error)
+	SetCommentsCache(ctx context.Context, videoID int64, comments []pojo.Comment) error
+	DelCommentsCache(ctx context.Context, videoID int64) error
+
+	// 评论点赞全景透传
+	GetLikedCommentMap(ctx context.Context, userID int64) (map[int64]bool, error)
+	BatchGetLikeCounts(ctx context.Context, commentIDs []int64) (map[int64]int64, error)
 }
 
-// GetCommentsByVideoID ── 树状递归的物化路径一键拉取
-func (r *CommentRepository) GetCommentsByVideoID(ctx context.Context, videoID int64) ([]pojo.Comment, error) {
-	var comments []pojo.Comment
+type commentRepository struct{}
 
-	/*
-	   因为在设计时采用了 Path 字段（如 "1/", "1/3/", "1/4/9/"），
-	   在 MySQL 中，对 varchar 类型的 Path 执行 ASC（正序）排列时，
-	   字典序会精妙地自动把“子评论”死死贴在对应的“父评论”正下方！
-	   这样前端拿到一个干净的平铺切片列表后，直接顺序渲染就是完美的树状嵌套结构，省去了几十行的递归算力！
-	*/
-	err := global.GVA_DB.WithContext(ctx).
-		Where("video_id = ?", videoID).
-		Order("path ASC, created_at ASC"). // 路径正序，先评的在上面
-		Find(&comments).Error
+func NewCommentRepository() CommentRepository {
+	return &commentRepository{}
+}
 
+func (r *commentRepository) CreateComment(ctx context.Context, comment *pojo.Comment) error {
+	return global.GVA_DB.WithContext(ctx).Create(comment).Error
+}
+
+func (r *commentRepository) GetCommentByID(ctx context.Context, id int64) (*pojo.Comment, error) {
+	var comment pojo.Comment
+	err := global.GVA_DB.WithContext(ctx).Where("id = ?", id).First(&comment).Error
 	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [DB] 一键拉取视频 [%d] 的物化路径评论树失败: %v", videoID, err)
 		return nil, err
 	}
-	return comments, nil
+	return &comment, nil
+}
+
+func (r *commentRepository) GetCommentsByVideoID(ctx context.Context, videoID int64) ([]pojo.Comment, error) {
+	var comments []pojo.Comment
+	// 路径正序字典排列，巧妙让子评论死死贴在父评论下方
+	err := global.GVA_DB.WithContext(ctx).
+		Where("video_id = ?", videoID).
+		Order("path ASC, created_at ASC").
+		Find(&comments).Error
+	return comments, err
+}
+
+func (r *commentRepository) UpdateCommentPath(ctx context.Context, id int64, path string) error {
+	return global.GVA_DB.WithContext(ctx).Model(&pojo.Comment{}).Where("id = ?", id).Update("path", path).Error
+}
+
+func (r *commentRepository) GetCommentsCache(ctx context.Context, videoID int64) ([]pojo.Comment, bool, error) {
+	commentListKey := fmt.Sprintf("Comment:List:%d", videoID)
+	cacheData, err := global.GVA_REDIS.Get(ctx, commentListKey).Result()
+	if err != nil || cacheData == "" {
+		return nil, false, err
+	}
+	var pojoComments []pojo.Comment
+	_ = json.Unmarshal([]byte(cacheData), &pojoComments)
+	return pojoComments, true, nil
+}
+
+func (r *commentRepository) SetCommentsCache(ctx context.Context, videoID int64, comments []pojo.Comment) error {
+	commentListKey := fmt.Sprintf("Comment:List:%d", videoID)
+	jsonData, _ := json.Marshal(comments)
+	return global.GVA_REDIS.Set(ctx, commentListKey, jsonData, time.Hour*24).Err()
+}
+
+func (r *commentRepository) DelCommentsCache(ctx context.Context, videoID int64) error {
+	commentListKey := fmt.Sprintf("Comment:List:%d", videoID)
+	return global.GVA_REDIS.Del(ctx, commentListKey).Err()
+}
+
+func (r *commentRepository) GetLikedCommentMap(ctx context.Context, userID int64) (map[int64]bool, error) {
+	likedCommentMap := make(map[int64]bool)
+	userLikeKey := fmt.Sprintf("User:Like:Comments:%d", userID)
+
+	exists, existErr := global.GVA_REDIS.Exists(ctx, userLikeKey).Result()
+	if existErr == nil && exists > 0 {
+		likedIDsStr, _ := global.GVA_REDIS.SMembers(ctx, userLikeKey).Result()
+		for _, idStr := range likedIDsStr {
+			if id, parseErr := strconv.ParseInt(idStr, 10, 64); parseErr == nil {
+				likedCommentMap[id] = true
+			}
+		}
+		return likedCommentMap, nil
+	}
+
+	var likedIDs []int64
+	err := global.GVA_DB.WithContext(ctx).Model(&pojo.LikeRecord{}).
+		Where("user_id = ? AND target_type = ? AND status = 1", userID, "comment").
+		Pluck("target_id", &likedIDs).Error
+	if err != nil {
+		return likedCommentMap, err
+	}
+
+	if len(likedIDs) > 0 {
+		interfaces := make([]interface{}, len(likedIDs))
+		for i, id := range likedIDs {
+			interfaces[i] = id
+			likedCommentMap[id] = true
+		}
+		global.GVA_REDIS.SAdd(ctx, userLikeKey, interfaces...)
+		global.GVA_REDIS.Expire(ctx, userLikeKey, 24*time.Hour)
+	}
+	return likedCommentMap, nil
+}
+
+func (r *commentRepository) BatchGetLikeCounts(ctx context.Context, commentIDs []int64) (map[int64]int64, error) {
+	pipe := global.GVA_REDIS.Pipeline()
+	countCmds := make(map[int64]*redis.StringCmd)
+	for _, id := range commentIDs {
+		countKey := fmt.Sprintf("Like:Count:comment:%d", id)
+		countCmds[id] = pipe.Get(ctx, countKey)
+	}
+	_, _ = pipe.Exec(ctx)
+
+	result := make(map[int64]int64)
+	for id, cmd := range countCmds {
+		if cnt, err := cmd.Int64(); err == nil {
+			result[id] = cnt
+		}
+	}
+	return result, nil
 }

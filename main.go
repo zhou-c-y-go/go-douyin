@@ -19,18 +19,21 @@ import (
 )
 
 func main() {
-	// 1. 启动 Viper，读取 config.yaml
+	// 启动 Viper，读取 config.yaml
 	_ = core.Viper()
-	// 2. 初始化日志
+	// 初始化日志
 	logger.Init()
-	// 3. 初始化依赖服务客户端
+	// 初始化依赖服务客户端
 	Init.InitMinio()
-	global.GVA_DB = Init.GormMySQL()
+	// 初始化数据库配置
+	global.GVA_DB = Init.InitDatabaseFactory()
+	Init.RegisterAutoMigrateTable(global.GVA_DB)
+	// 初始化redis缓存
 	Init.Redis()
-	// 4. 等待 Docker Kafka 就绪
+	// 等待 Docker Kafka 就绪
 	// 现在 Kafka 由 docker-compose 管理，Go 这里只做连接检查
-	Init.Kafka()
-	// 5. 注册自定义校验器
+	//Init.Kafka()
+	// 注册自定义校验器
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		err := v.RegisterValidation("verifyMobileFormat", utils.VerifyMobileFormat)
 		if err != nil {
@@ -38,13 +41,13 @@ func main() {
 			return
 		}
 	}
-	// 6. 初始化 HTTP Server
+	// 初始化 HTTP Server
 	srv := &http.Server{
 		Addr:    global.GLOB_CONFIG.System.Port,
 		Handler: Init.Routers(),
 	}
 
-	// 7. 启动 Web 服务
+	// 启动 Web 服务
 	go func() {
 		log.Printf("📥 Web 服务正在启动，监听端口: %s\n", global.GLOB_CONFIG.System.Port)
 
@@ -53,7 +56,7 @@ func main() {
 		}
 	}()
 
-	// 8. 等待 Ctrl+C 或系统终止信号
+	// 等待 Ctrl+C 或系统终止信号
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
@@ -61,7 +64,7 @@ func main() {
 	fmt.Println("\n----------------------------------------------------------------")
 	log.Println("👋 接收到关闭信号，正在优雅关闭服务...")
 
-	// 9. 优雅关闭 Web 服务
+	// 优雅关闭 Web 服务
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 

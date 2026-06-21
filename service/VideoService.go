@@ -4,172 +4,117 @@ import (
 	"Go_Project/common/model/pojo"
 	"Go_Project/common/model/response"
 	repo "Go_Project/common/repository"
-	"Go_Project/global"
 	"Go_Project/utils"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"mime/multipart"
 	"time"
 )
 
-type VideoService struct {
-	videoRepo   repo.VideoRepository
-	commentRepo repo.CommentRepository
+// VideoService 视频模块业务标杆接口
+type VideoService interface {
+	UploadVideoService(ctx context.Context, title string, tags string, videoFile, coverFile *multipart.FileHeader, videoObj, coverObj multipart.File, authorID, duration int64) error
+	GetVideoFeedService(ctx context.Context) ([]pojo.Video, error)
+	GetFeedStreamService(ctx context.Context, currentUserID int64) ([]response.VideoVO, error)
+	RepairHistoricalDuration(ctx context.Context, videoID int64, duration int64) error
+	CompleteMultipartVideoService(ctx context.Context, uploadID, objectName, coverName, title, tags string, duration int64, authorID int64) error
+	GetUserVideoListService(ctx context.Context, targetUserID int64) ([]response.VideoVO, error)
+	GetVideoDetailService(ctx context.Context, videoID int64, currentUserID int64) (*response.VideoVO, error)
 }
 
-// UploadVideoService ── ✅ 视频+封面双 MinIO 落盘与多级缓存同步工厂
-func (s *VideoService) UploadVideoService(
-	ctx context.Context,
-	title string,
-	tags string,
-	videoFile, coverFile *multipart.FileHeader,
-	videoObj, coverObj multipart.File,
-	authorID, duration int64) error {
-	// 🎯 核心升级防线 1：在抛投视频前，确保 "videos" 桶稳如泰山
-	if err := utils.EnsureBucketExists(ctx, "videos"); err != nil {
-		global.LogCtx(ctx).Errorf("❌ [Service] 确保 videos 存储桶存在失败: %v", err)
-		return errors.New("视频存储通道初始化失败，请稍后再试")
-	}
+type videoService struct {
+	videoRepo repo.VideoRepository
+	userRepo  repo.UserRepository // 引入以支持内存多表并网聚合
+}
 
-	// 1. 将视频源文件推送到 MinIO 的 "videos" 桶中
-	videoOk := utils.UpLoadFile(ctx, "videos", videoFile.Filename, videoObj, videoFile.Size)
-	if !videoOk {
-		global.LogCtx(ctx).Error("❌ [Service] 视频流推入 MinIO 桶失败")
+func NewVideoService(vr repo.VideoRepository, ur repo.UserRepository) VideoService {
+	return &videoService{videoRepo: vr, userRepo: ur}
+}
+
+func (s *videoService) UploadVideoService(ctx context.Context, title string, tags string, videoFile, coverFile *multipart.FileHeader, videoObj, coverObj multipart.File, authorID, duration int64) error {
+	if err := utils.EnsureBucketExists(ctx, "videos"); err != nil {
+		return errors.New("视频存储通道初始化失败")
+	}
+	if !utils.UpLoadFile(ctx, "videos", videoFile.Filename, videoObj, videoFile.Size) {
 		return errors.New("视频上传存储失败")
 	}
 	videoUrl := utils.GetFileURL(ctx, "videos", videoFile.Filename, time.Hour*24*7)
 
-	// 🎯 核心升级防线 2：在抛投封面海报前，同样雷达扫描确保 "covers" 桶孵化就位
 	if err := utils.EnsureBucketExists(ctx, "covers"); err != nil {
-		global.LogCtx(ctx).Errorf("❌ [Service] 确保 covers 存储桶存在失败: %v", err)
-		return errors.New("封面图存储通道初始化失败，请稍后再试")
+		return errors.New("封面图存储通道初始化失败")
 	}
-
-	// 2. 将封面图片推送到 MinIO 的 "covers" 桶中
-	coverOk := utils.UpLoadFile(ctx, "covers", coverFile.Filename, coverObj, coverFile.Size)
-	if !coverOk {
-		global.LogCtx(ctx).Error("❌ [Service] 封面图推入 MinIO 桶失败")
+	if !utils.UpLoadFile(ctx, "covers", coverFile.Filename, coverObj, coverFile.Size) {
 		return errors.New("封面图上传存储失败")
 	}
 	coverUrl := utils.GetFileURL(ctx, "covers", coverFile.Filename, time.Hour*24*7)
 
-	// 3. 规整核心实体，回源持久化层写入 MySQL
 	videoEntity := &pojo.Video{
-		Title:         title,
-		AuthorID:      authorID, // 锁死当前操作人，坚决防止越权！
-		VideoUrl:      videoUrl,
-		CoverUrl:      coverUrl,
-		Duration:      int(duration),
-		LikeCount:     0,
-		FavoriteCount: 0,
-		Tags:          tags,
+		Title: title, AuthorID: authorID, VideoUrl: videoUrl, CoverUrl: coverUrl,
+		Duration: int(duration), LikeCount: 0, FavoriteCount: 0, Tags: tags,
 	}
 	if err := s.videoRepo.CreateVideo(ctx, videoEntity); err != nil {
 		return errors.New("视频记录入库失败")
 	}
 
-	// 4. 高并发高可用埋点：异步推入 Redis 推荐池
 	detachedCtx := context.WithoutCancel(ctx)
-	go func(traceCtx context.Context, vid int64, authorID int64) {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		poolKey := "GlobalVideoPool" // todo:键名更改？
-		err := global.GVA_REDIS.SAdd(bgCtx, poolKey, vid).Err()
-		if err != nil {
-			global.LogCtx(bgCtx).Errorw("🔥 [Async] 推送新视频至 Redis 推荐池失败", "err", err)
-		} else {
-			global.LogCtx(bgCtx).Infof("🔥 [Async] 视频 [%d] 已成功并网全局 Redis 推荐池！", vid)
-		}
-		userCacheKey := fmt.Sprintf("UserVideoList:%d", authorID)
-		if err := global.GVA_REDIS.Del(bgCtx, userCacheKey).Err(); err != nil {
-			global.LogCtx(bgCtx).Errorw("删除用户作品集缓存失败", "userID", authorID, "err", err)
-		} else {
-			global.LogCtx(bgCtx).Infof("已清除用户 %d 的个人主页缓存", authorID)
-		}
+	go func(traceCtx context.Context, vid, uid int64) {
+		_ = s.videoRepo.AddVideoToPoolCache(traceCtx, vid)
+		_ = s.videoRepo.DelUserVideoListCache(traceCtx, uid)
 	}(detachedCtx, videoEntity.ID, authorID)
-
 	return nil
 }
 
-func (s *VideoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, error) {
-	cacheKey := "GlobalFeedCache"
-	// 1. 优先拦截并捕获 Redis 内存中的缓存
-	cachedData, err := global.GVA_REDIS.Get(ctx, cacheKey).Result()
+func (s *videoService) GetVideoFeedService(ctx context.Context) ([]pojo.Video, error) {
+	cachedData, err := s.videoRepo.GetGlobalFeedCache(ctx)
 	if err == nil && cachedData != "" {
 		var cachedVideos []pojo.Video
 		if json.Unmarshal([]byte(cachedData), &cachedVideos) == nil {
-			global.LogCtx(ctx).Infof("[Redis Cache] 内存完美击中！成功拦截并分流了本次 Feed 请求")
 			return cachedVideos, nil
 		}
 	}
-	// 2. 🕳️ 穿透/未命中兜底：回源 MySQL
-	global.LogCtx(ctx).Warnln("⚠[Redis Cache] 发生缓存穿透/失效！正在紧急回源 MySQL 捞取新鲜流...")
-	// todo:分页查询每页设置，改为可配置的分页参数（如 limit, offset）
+
 	videos, err := s.videoRepo.GetVideosForFeed(ctx, time.Now(), 4)
 	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [MySQL] 回源查询基础视频流发生毁灭性崩溃: %v", err)
 		return nil, err
 	}
-	// 3. 将新获取的 MySQL 数组序列化成 JSON，回填给 Redis
 	if len(videos) > 0 {
-		jsonData, err := json.Marshal(videos)
-		if err == nil {
-			err = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Second).Err()
-			if err != nil {
-				global.LogCtx(ctx).Errorw("🔥 [Redis] 回填 Feed 缓存至内存阵列失败", "err", err)
-			} else {
-				global.LogCtx(ctx).Infoln("✅ [Redis] Feed 缓存已成功并网回填，后续流量正式进入高速公路！")
-			}
-		}
+		jsonData, _ := json.Marshal(videos)
+		_ = s.videoRepo.SetGlobalFeedCache(ctx, string(jsonData), 10*time.Second)
 	}
-
 	return videos, nil
 }
 
-// GetFeedStreamService ── ✅ 高性能 Feed 流拼装业务（升级版：消灭 N+1，完美融合最新点赞账本）
-func (s *VideoService) GetFeedStreamService(
-	ctx context.Context,
-	currentUserID int64) ([]response.VideoVO, error) {
-	// 1. 调用持久层捞取最新发布的时间线原始视频
+func (s *videoService) GetFeedStreamService(ctx context.Context, currentUserID int64) ([]response.VideoVO, error) {
 	pojoVideos, err := s.GetVideoFeedService(ctx)
 	if err != nil {
 		return nil, err
 	}
 	videoVOs := make([]response.VideoVO, 0, len(pojoVideos))
 
-	// =================================================================
-	// 🎯 核心高并发并网优化：一枪击穿明细表，批量捞取当前操作人的点赞快照
-	// =================================================================
 	likedVideoMap := make(map[int64]bool)
 	if currentUserID > 0 && len(pojoVideos) > 0 {
-		// 批量收集当前页面的所有视频 ID
 		videoIDs := make([]int64, 0, len(pojoVideos))
 		for _, v := range pojoVideos {
 			videoIDs = append(videoIDs, v.ID)
 		}
-
-		var likedIDs []int64
-		// 严格对齐新版幂等点赞账本，只查 status = 1 且类型为 video 的黄金明细
-		global.GVA_DB.WithContext(ctx).Model(&pojo.LikeRecord{}).
-			Where("user_id = ? AND target_type = ? AND target_id IN ? AND status = 1", currentUserID, "video", videoIDs).
-			Pluck("target_id", &likedIDs)
-
-		// 焊接注入内存哈希阵列，实现 O(1) 极速匹配
+		likedIDs, _ := s.videoRepo.BatchGetLikedVideoIDs(ctx, currentUserID, videoIDs)
 		for _, id := range likedIDs {
 			likedVideoMap[id] = true
 		}
 	}
 
-	// 2. 穿针引线，开始内存高级组装
 	for _, v := range pojoVideos {
-		// A. 捞取作者社交卡片
+		// 回源依赖注入的 userRepo 聚合用户信息
 		var author pojo.User
-		userKey := fmt.Sprintf("UserProfile:%d", v.AuthorID)
-		_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author)
-		if author.ID == 0 {
-			global.GVA_DB.First(&author, v.AuthorID)
+		fields, err := s.userRepo.GetProfileCache(ctx, v.AuthorID)
+		if err == nil && fields["Username"] != "" {
+			author.ID = v.AuthorID
+			author.Username = fields["Username"]
+			author.HeadImg = fields["HeadImg"]
+			author.Signature = fields["Signature"]
+		} else {
+			author, _ = s.userRepo.QueryByID(ctx, int(v.AuthorID))
 		}
 
 		vo := response.VideoVO{
@@ -182,260 +127,167 @@ func (s *VideoService) GetFeedStreamService(
 			FavoriteCount: v.FavoriteCount,
 			CreatedAt:     v.CreatedAt,
 			Author: response.AuthorInfo{
-				ID:        author.ID,
-				Username:  author.Username,
-				Avatar:    author.HeadImg,
-				Signature: author.Signature,
+				ID: author.ID, Username: author.Username, Avatar: author.HeadImg, Signature: author.Signature,
 			},
-			IsLike:     likedVideoMap[v.ID], // 🚀 完美对齐内存批量账本，彻底消除刷新熄灭 Bug！
-			IsFavorite: likedVideoMap[v.ID], // 收藏逻辑未来完全可以镜像同理并网
+			IsLike:     likedVideoMap[v.ID],
+			IsFavorite: likedVideoMap[v.ID],
 			Tags:       v.Tags,
-			TargetType: "video", // 宣告厂牌，让前端点赞组件盲抠抓取组件上下文
+			TargetType: "video",
 		}
 		videoVOs = append(videoVOs, vo)
 	}
 	return videoVOs, nil
 }
 
-// RepairHistoricalDuration ── 回源 MySQL 修正 duration 字段
-func (s *VideoService) RepairHistoricalDuration(ctx context.Context, videoID int64, duration int64) error {
-	err := global.GVA_DB.Model(&pojo.Video{}).Where("id = ?", videoID).Update("duration", duration).Error
-	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [Repair] 修复历史视频 [%d] 时长失败: %v", videoID, err)
-		return err
-	}
-	global.LogCtx(ctx).Infof("✅ [Repair] 历史数据清洗成功！视频 [%d] 时长已被修正为 %d 秒", videoID, duration)
-	return nil
+func (s *videoService) RepairHistoricalDuration(ctx context.Context, videoID int64, duration int64) error {
+	return s.videoRepo.UpdateDuration(ctx, videoID, duration)
 }
 
-// CompleteMultipartVideoService ── 👑 工业级闭环：分片合并 ＋ 数据库物理落盘 ＋ 缓存一致性自愈防御
-func (s *VideoService) CompleteMultipartVideoService(ctx context.Context, uploadID, objectName, coverName, title, tags string, duration int64, authorID int64) error {
-
-	// 1. 调用工具层底打，拼装碎片视频
+func (s *videoService) CompleteMultipartVideoService(ctx context.Context, uploadID, objectName, coverName, title, tags string, duration int64, authorID int64) error {
 	_, err := utils.MergeMinioMultipartUpload(ctx, "videos", objectName, uploadID)
 	if err != nil {
-		return errors.New("多媒体切片组装失败，存储通道发生硬熔断")
+		return errors.New("多媒体切片组装失败")
 	}
 
-	// 2. 帮视频和封面海报计算出带有时效的公网高速下载 URL
 	videoUrl := utils.GetFileURL(ctx, "videos", objectName, time.Hour*24*7)
 	coverUrl := utils.GetFileURL(ctx, "covers", coverName, time.Hour*24*7)
 
-	// 3. 规整核心实体，回源持久化层砸进 MySQL
 	videoEntity := &pojo.Video{
-		Title:         title,
-		AuthorID:      authorID,
-		VideoUrl:      videoUrl,
-		CoverUrl:      coverUrl,
-		Duration:      int(duration),
-		LikeCount:     0,
-		FavoriteCount: 0,
-		Tags:          tags,
+		Title: title, AuthorID: authorID, VideoUrl: videoUrl, CoverUrl: coverUrl,
+		Duration: int(duration), LikeCount: 0, FavoriteCount: 0, Tags: tags,
 	}
-	if err := s.videoRepo.CreateVideo(ctx, videoEntity); err != nil {
+	if err = s.videoRepo.CreateVideo(ctx, videoEntity); err != nil {
 		return errors.New("视频记录并网入库失败")
 	}
 
-	// 4. 🔥 数据一致性防御大闸门：清除 Feed 缓存与作者作品集缓存
-	err = global.GVA_REDIS.Del(ctx, "GlobalFeedCache").Err()
-	if err != nil {
-		global.LogCtx(ctx).Errorw("[CompleteMultipartVideoService]:\t删除原来缓存失败", "Error", err)
-	}
-	global.LogCtx(ctx).Infoln("🧹 [Cache Eviction] 直传合并成功，已全自动清空老旧 Redis 首页大 Feed 缓存层！")
-	userCacheKey := fmt.Sprintf("UserVideoList:%d", authorID)
-	if err = global.GVA_REDIS.Del(ctx, userCacheKey).Err(); err != nil {
-		global.LogCtx(ctx).Warnw("删除缓存失败", "key", userCacheKey, "err", err)
-	}
-	// 5. 高并发异步埋点：推入全局 Redis 推荐池
+	_ = s.videoRepo.DelGlobalFeedCache(ctx)
+	_ = s.videoRepo.DelUserVideoListCache(ctx, authorID)
+
 	detachedCtx := context.WithoutCancel(ctx)
 	go func(traceCtx context.Context, vid int64) {
-		poolKey := "GlobalVideoPool"
-		_ = global.GVA_REDIS.SAdd(traceCtx, poolKey, vid).Err()
+		_ = s.videoRepo.AddVideoToPoolCache(traceCtx, vid)
 	}(detachedCtx, videoEntity.ID)
 	return nil
 }
 
-// GetUserVideoListService ── 👑 接入动态 Redis 缓存的个人作品集装配业务
-func (s *VideoService) GetUserVideoListService(ctx context.Context, targetUserID int64) ([]response.VideoVO, error) {
-	cacheKey := fmt.Sprintf("UserVideoList:%d", targetUserID)
-
-	// 1. 探针雷达优先拦截内存
-	cachedData, err := global.GVA_REDIS.Get(ctx, cacheKey).Result()
+func (s *videoService) GetUserVideoListService(ctx context.Context, targetUserID int64) ([]response.VideoVO, error) {
+	cachedData, err := s.videoRepo.GetUserVideoListCache(ctx, targetUserID)
 	if err == nil && cachedData != "" {
 		var cachedVOs []response.VideoVO
 		if json.Unmarshal([]byte(cachedData), &cachedVOs) == nil {
-			global.LogCtx(ctx).Infof("⚡ [Redis] 成功击中创作者 [%d] 的个人主页作品集缓存！", targetUserID)
 			return cachedVOs, nil
 		}
 	}
 
-	// 2. 未命中兜底：回源 MySQL
-	global.LogCtx(ctx).Warnf("⚠️ [Redis] 创作者 [%d] 个人缓存穿透，正在回源 MySQL 补货...", targetUserID)
 	pojoVideos, err := s.videoRepo.GetVideosByAuthorID(ctx, targetUserID)
 	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [MySQL] 捞取用户作品集发生毁灭性崩溃: %v", err)
 		return nil, err
 	}
 
-	// 3. 开始拼装社交 VO 实体
 	var author pojo.User
-	userKey := fmt.Sprintf("UserProfile:%d", targetUserID)
-	_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author)
-	if author.ID != 0 {
-		// 使用 HSet 批量设置，并设置过期时间
-		global.GVA_REDIS.HSet(ctx, userKey, "id", author.ID, "username", author.Username, "head_img", author.HeadImg, "signature", author.Signature)
-		global.GVA_REDIS.Expire(ctx, userKey, 24*time.Hour)
+	fields, _ := s.userRepo.GetProfileCache(ctx, targetUserID)
+	if fields["Username"] != "" {
+		author.ID = targetUserID
+		author.Username = fields["Username"]
+		author.HeadImg = fields["HeadImg"]
+		author.Signature = fields["Signature"]
+	} else {
+		author, _ = s.userRepo.QueryByID(ctx, int(targetUserID))
 	}
+
 	videoVOs := make([]response.VideoVO, 0, len(pojoVideos))
 	for _, v := range pojoVideos {
-		likeCountKey := fmt.Sprintf("Like:Count:video:%d", v.ID)
-		likeCount, _ := global.GVA_REDIS.Get(ctx, likeCountKey).Int64()
-		if likeCount == 0 {
+		likeCount, err := s.videoRepo.GetVideoLikeCountCache(ctx, v.ID)
+		if err != nil {
 			likeCount = v.LikeCount
 		}
-		favoriteCountKey := fmt.Sprintf("Favorite:Count:video:%d", v.ID)
-		favCount, _ := global.GVA_REDIS.Get(ctx, favoriteCountKey).Int64()
-		if favCount == 0 {
+		favCount, err := s.videoRepo.GetVideoFavoriteCountCache(ctx, v.ID)
+		if err != nil {
 			favCount = v.FavoriteCount
 		}
+
 		vo := response.VideoVO{
-			ID:            v.ID,
-			Title:         v.Title,
-			VideoUrl:      v.VideoUrl,
-			CoverUrl:      v.CoverUrl,
-			Duration:      v.Duration,
-			LikeCount:     likeCount,
-			FavoriteCount: favCount,
-			CreatedAt:     v.CreatedAt,
-			Tags:          v.Tags,
+			ID: v.ID, Title: v.Title, VideoUrl: v.VideoUrl, CoverUrl: v.CoverUrl,
+			Duration: v.Duration, LikeCount: likeCount, FavoriteCount: favCount, CreatedAt: v.CreatedAt, Tags: v.Tags,
 			Author: response.AuthorInfo{
-				ID:        author.ID,
-				Username:  author.Username,
-				Avatar:    author.HeadImg,
-				Signature: author.Signature,
+				ID: author.ID, Username: author.Username, Avatar: author.HeadImg, Signature: author.Signature,
 			},
-			TargetType: "video", // 顺手补齐实体厂牌标识
+			TargetType: "video",
 		}
 		videoVOs = append(videoVOs, vo)
 	}
-	// 4. 送回 Redis，设置 10 分钟弹性时效
-	if len(videoVOs) > 0 {
-		jsonData, err := json.Marshal(videoVOs)
-		if err == nil {
-			_ = global.GVA_REDIS.Set(ctx, cacheKey, jsonData, 10*time.Minute).Err()
-		}
-	}
 
+	if len(videoVOs) > 0 {
+		jsonData, _ := json.Marshal(videoVOs)
+		_ = s.videoRepo.SetUserVideoListCache(ctx, targetUserID, string(jsonData), 10*time.Minute)
+	}
 	return videoVOs, nil
 }
 
-// GetVideoDetailService ── 👑 视频全景视图：单体信息 + 社交卡片 + 千人千面状态装配
-func (s *VideoService) GetVideoDetailService(ctx context.Context, videoID int64, currentUserID int64) (*response.VideoVO, error) {
-
-	// 1. 底层单点击穿：捞取视频基础流信息
+func (s *videoService) GetVideoDetailService(ctx context.Context, videoID int64, currentUserID int64) (*response.VideoVO, error) {
 	video, err := s.videoRepo.GetVideoByID(ctx, videoID)
 	if err != nil {
-		global.LogCtx(ctx).Errorf("❌ [MySQL] 捞取单体视频 [%d] 遭遇滑铁卢: %v", videoID, err)
 		return nil, errors.New("视频可能已迷失")
 	}
 
-	// 2. 社交作者卡片并网：优先走 Redis 高速动态哈希
 	var author pojo.User
-	userKey := fmt.Sprintf("UserProfile:%d", video.AuthorID)
-	_ = global.GVA_REDIS.HGetAll(ctx, userKey).Scan(&author)
-	if author.ID == 0 {
-		global.GVA_DB.First(&author, video.AuthorID)
-	}
-	// 点赞逻辑
-	likeCountKey := fmt.Sprintf("Like:Count:video:%d", videoID)
-	cacheLikeCount, likeErr := global.GVA_REDIS.Get(ctx, likeCountKey).Int64()
-	if likeErr != nil {
-		cacheLikeCount = video.LikeCount
-		global.GVA_REDIS.Set(ctx, likeCountKey, cacheLikeCount, 24*time.Hour)
-	}
-	// 收藏逻辑
-	favoriteCountKey := fmt.Sprintf("Favorite:Count:video:%d", videoID)
-	cacheFavoriteCount, likeErr := global.GVA_REDIS.Get(ctx, favoriteCountKey).Int64()
-	if likeErr != nil {
-		cacheFavoriteCount = video.FavoriteCount
-		global.GVA_REDIS.Set(ctx, favoriteCountKey, cacheFavoriteCount, 24*time.Hour)
-	}
-	// 3. 千人千面交互感知：升级为精准敲门 MySQL 新点赞明细表
-	var isLike = false
-	var isFavor = false
-	if currentUserID > 0 {
-		// 点赞逻辑
-		likeSetKey := fmt.Sprintf("Like:Set:video:%d", videoID)
-		keyExists, err := global.GVA_REDIS.Exists(ctx, likeSetKey).Result()
-		if err != nil || keyExists == 0 {
-			// Redis 出错 或 key 不存在：降级到 MySQL
-			var count int64
-			global.GVA_DB.WithContext(ctx).Model(&pojo.LikeRecord{}).
-				Where("user_id = ? AND target_id = ? AND target_type = ? AND status = 1", currentUserID, videoID, "video").
-				Count(&count)
-			isLike = count > 0
-			if isLike {
-				go func() {
-					bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
-					defer cancel()
-					if addErr := global.GVA_REDIS.SAdd(bgCtx, likeSetKey, currentUserID).Err(); addErr != nil {
-						global.LogCtx(bgCtx).Errorw("异步回填点赞集合失败", "err", addErr)
-					} else {
-						global.GVA_REDIS.Expire(bgCtx, likeSetKey, 24*time.Hour)
-					}
-				}()
-			}
-		} else {
-			// key 存在，直接判断成员
-			isLike, _ = global.GVA_REDIS.SIsMember(ctx, likeSetKey, currentUserID).Result()
-		}
-		// 收藏逻辑
-		favoriteSetKey := fmt.Sprintf("Favorite:Set:video:%d", videoID)
-		keyExists, err = global.GVA_REDIS.Exists(ctx, favoriteSetKey).Result()
-		if err != nil || keyExists == 0 {
-			// Redis 出错 或 key 不存在：降级到 MySQL
-			var count int64
-			global.GVA_DB.WithContext(ctx).Model(&pojo.FavoriteRecord{}).
-				Where("user_id = ? AND target_id = ? AND target_type = ? AND status = 1", currentUserID, videoID, "video").
-				Count(&count)
-			isFavor = count > 0
-			if isFavor {
-				go func() {
-					bgCtx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
-					defer cancel()
-					if addErr := global.GVA_REDIS.SAdd(bgCtx, favoriteSetKey, currentUserID).Err(); addErr != nil {
-						global.LogCtx(bgCtx).Errorw("异步回填收藏集合失败", "err", addErr)
-					} else {
-						global.GVA_REDIS.Expire(bgCtx, favoriteSetKey, 24*time.Hour)
-					}
-				}()
-			}
-		} else {
-			// key 存在，直接判断成员
-			isFavor, _ = global.GVA_REDIS.SIsMember(ctx, favoriteSetKey, currentUserID).Result()
-		}
-	}
-	// 4. 契约规整：打包成我们前端 Vue 3 极度渴望的奢华 VO 对象
-	vo := &response.VideoVO{
-		ID:            video.ID,
-		Title:         video.Title,
-		VideoUrl:      video.VideoUrl,
-		CoverUrl:      video.CoverUrl,
-		Duration:      video.Duration,
-		LikeCount:     cacheLikeCount, // 承接底层原子计数器的行锁安全数字
-		FavoriteCount: cacheFavoriteCount,
-		CreatedAt:     video.CreatedAt,
-		Tags:          video.Tags,
-		Author: response.AuthorInfo{
-			ID:        author.ID,
-			Username:  author.Username,
-			Avatar:    author.HeadImg,
-			Signature: author.Signature,
-		},
-		IsLike:     isLike, // 精准回显状态，刷新坚决不灭！
-		IsFavorite: isFavor,
-		TargetType: "video",
+	fields, _ := s.userRepo.GetProfileCache(ctx, video.AuthorID)
+	if fields["Username"] != "" {
+		author.ID = video.AuthorID
+		author.Username = fields["Username"]
+		author.HeadImg = fields["HeadImg"]
+		author.Signature = fields["Signature"]
+	} else {
+		author, _ = s.userRepo.QueryByID(ctx, int(video.AuthorID))
 	}
 
+	cacheLikeCount, err := s.videoRepo.GetVideoLikeCountCache(ctx, videoID)
+	if err != nil {
+		cacheLikeCount = video.LikeCount
+		_ = s.videoRepo.SetVideoLikeCountCache(ctx, videoID, cacheLikeCount, 24*time.Hour)
+	}
+	cacheFavoriteCount, err := s.videoRepo.GetVideoFavoriteCountCache(ctx, videoID)
+	if err != nil {
+		cacheFavoriteCount = video.FavoriteCount
+		_ = s.videoRepo.SetVideoFavoriteCountCache(ctx, videoID, cacheFavoriteCount, 24*time.Hour)
+	}
+
+	var isLike, isFavor bool
+	if currentUserID > 0 {
+		keyExists, err := s.videoRepo.ExistsLikeSetCache(ctx, videoID)
+		if err != nil || keyExists == 0 {
+			isLike, _ = s.videoRepo.CheckLikeRecordExists(ctx, currentUserID, videoID)
+			if isLike {
+				go func() {
+					bgCtx := context.Background()
+					_ = s.videoRepo.AddLikeSetCache(bgCtx, videoID, currentUserID, 24*time.Hour)
+				}()
+			}
+		} else {
+			isLike, _ = s.videoRepo.IsMemberLikeSetCache(ctx, videoID, currentUserID)
+		}
+
+		keyExists, err = s.videoRepo.ExistsFavoriteSetCache(ctx, videoID)
+		if err != nil || keyExists == 0 {
+			isFavor, _ = s.videoRepo.CheckFavoriteRecordExists(ctx, currentUserID, videoID)
+			if isFavor {
+				go func() {
+					bgCtx := context.Background()
+					_ = s.videoRepo.AddFavoriteSetCache(bgCtx, videoID, currentUserID, 24*time.Hour)
+				}()
+			}
+		} else {
+			isFavor, _ = s.videoRepo.IsMemberFavoriteSetCache(ctx, videoID, currentUserID)
+		}
+	}
+
+	vo := &response.VideoVO{
+		ID: video.ID, Title: video.Title, VideoUrl: video.VideoUrl, CoverUrl: video.CoverUrl,
+		Duration: video.Duration, LikeCount: cacheLikeCount, FavoriteCount: cacheFavoriteCount, CreatedAt: video.CreatedAt, Tags: video.Tags,
+		Author: response.AuthorInfo{
+			ID: author.ID, Username: author.Username, Avatar: author.HeadImg, Signature: author.Signature,
+		},
+		IsLike: isLike, IsFavorite: isFavor, TargetType: "video",
+	}
 	return vo, nil
 }
