@@ -107,9 +107,6 @@ func (s *userService) GetUserProfileService(ctx context.Context, userID int64, u
 	resp.Avatar = user.HeadImg
 	resp.BackgroundImage = user.BackgroundImage
 	resp.Signature = user.Signature
-	resp.TotalLiked = user.TotalFavorited
-	resp.WorkCount = user.WorkCount
-	resp.FavoriteCount = user.FavoriteCount
 	resp.Gender = user.Gender
 
 	// 异步回填
@@ -119,10 +116,8 @@ func (s *userService) GetUserProfileService(ctx context.Context, userID int64, u
 			"HeadImg":         u.HeadImg,
 			"BackgroundImage": u.BackgroundImage,
 			"Signature":       u.Signature,
-			"TotalFavorited":  u.TotalFavorited,
-			"WorkCount":       u.WorkCount,
-			"FavoriteCount":   u.FavoriteCount,
 			"Gender":          u.Gender,
+			"ID":              u.ID,
 		}
 		_ = s.userRepo.SetProfileCache(traceCtx, uid, cacheMap, 7*24*time.Hour)
 	}(userID, user, context.WithoutCancel(ctx))

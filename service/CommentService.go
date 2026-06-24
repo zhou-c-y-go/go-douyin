@@ -36,13 +36,19 @@ func (s *commentService) GetVideoCommentTreeService(ctx context.Context, videoID
 
 	// 1. 干净的缓存拦截
 	pojoComments, hit, err = s.commentRepo.GetCommentsCache(ctx, videoID)
+	if err != nil {
+		global.LogCtx(ctx).Warnw("读取评论缓存失败，降级查MySQL", "Error", err)
+		return nil, err
+	}
 	if !hit {
+		global.LogCtx(ctx).Infoln("未命中评论树缓存")
 		pojoComments, err = s.commentRepo.GetCommentsByVideoID(ctx, videoID)
 		if err != nil {
 			global.LogCtx(ctx).Errorw("从MySQL中拉取评论树失败", "Error", err)
 			return nil, err
 		}
 		if len(pojoComments) == 0 {
+			_ = s.commentRepo.SetCommentsCache(ctx, videoID, []pojo.Comment{})
 			return []*response.CommentVO{}, nil
 		}
 		_ = s.commentRepo.SetCommentsCache(ctx, videoID, pojoComments)

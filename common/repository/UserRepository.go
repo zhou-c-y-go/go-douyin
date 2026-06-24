@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/redis/go-redis/v9"
+	"strconv"
 	"time"
 )
 
@@ -109,7 +111,7 @@ func (r *userRepository) GetProfileCache(ctx context.Context, userID int64) (map
 
 func (r *userRepository) SetProfileCache(ctx context.Context, userID int64, cacheMap map[string]interface{}, ttl time.Duration) error {
 	redisKey := fmt.Sprintf("UserProfile:%d", userID)
-	if err := global.GVA_REDIS.HMSet(ctx, redisKey, cacheMap).Err(); err != nil {
+	if err := global.GVA_REDIS.HSet(ctx, redisKey, cacheMap).Err(); err != nil {
 		return err
 	}
 	return global.GVA_REDIS.Expire(ctx, redisKey, ttl).Err()
@@ -130,19 +132,89 @@ func (r *userRepository) HSetProfileCache(ctx context.Context, userID int64, fie
 	return global.GVA_REDIS.HSet(ctx, redisKey, field, value).Err()
 }
 
-// 其具体在 userRepository 中的实现如下：
 func (r *userRepository) BatchGetUserCardMap(ctx context.Context, userIDs []int64) (map[int64]response.UserCardInfo, error) {
 	userCardMap := make(map[int64]response.UserCardInfo)
-	for _, uid := range userIDs {
-		var u pojo.User
-		redisKey := fmt.Sprintf("UserProfile:%d", uid)
-		_ = global.GVA_REDIS.HGetAll(ctx, redisKey).Scan(&u)
-		if u.ID == 0 {
-			if err := global.GVA_DB.WithContext(ctx).First(&u, uid).Error; err != nil {
-				continue
-			}
+	if len(userIDs) == 0 {
+		return userCardMap, nil
+	}
+	// 1. Pipeline 批量读取
+	pipe := global.GVA_REDIS.Pipeline()
+	cmds := make([]*redis.MapStringStringCmd, len(userIDs))
+	for i, uid := range userIDs {
+		cmds[i] = pipe.HGetAll(ctx, fmt.Sprintf("UserProfile:%d", uid))
+	}
+	_, _ = pipe.Exec(ctx)
+	missedUIDs := make([]int64, 0)
+	for i, uid := range userIDs {
+		resMap, err := cmds[i].Result()
+		// 🎯 终极刺客杀手：用 ID 作为探测雷达！因为数据库里 ID 绝对不可能为空！
+		idStr := resMap["ID"]
+		if idStr == "" {
+			idStr = resMap["id"]
 		}
-		userCardMap[uid] = response.UserCardInfo{ID: u.ID, Username: u.Username, Avatar: u.HeadImg}
+		if err == nil && idStr != "" {
+			// 缓存绝对击中！哪怕他没名字、没头像，只要有 ID 就算命中！
+			username := resMap["Username"]
+			if username == "" {
+				username = resMap["username"]
+			}
+
+			avatar := resMap["HeadImg"]
+			if avatar == "" {
+				avatar = resMap["headImg"]
+			}
+			userCardMap[uid] = response.UserCardInfo{
+				ID:       uid,
+				Username: username,
+				Avatar:   avatar,
+			}
+		} else {
+			missedUIDs = append(missedUIDs, uid)
+		}
+	}
+	// 2. 补票收网
+	if len(missedUIDs) > 0 {
+		var pojoUsers []pojo.User
+		err := global.GVA_DB.WithContext(ctx).Where("id IN ?", missedUIDs).Find(&pojoUsers).Error
+		if err == nil && len(pojoUsers) > 0 {
+			for _, u := range pojoUsers {
+				userCardMap[u.ID] = response.UserCardInfo{ID: u.ID, Username: u.Username, Avatar: u.HeadImg}
+			}
+			// 3. 异步回填
+			detachedCtx := context.WithoutCancel(ctx)
+			go func(bgCtx context.Context, dbUsers []pojo.User) {
+				defer func() {
+					if r1 := recover(); r1 != nil {
+						global.LogCtx(bgCtx).Errorw("🚨 缓存回填协程崩溃", "err", r1)
+					}
+				}()
+				writePipe := global.GVA_REDIS.Pipeline()
+				for _, u := range dbUsers {
+					redisKey := fmt.Sprintf("UserProfile:%d", u.ID)
+
+					// 💡 强转为 String，使用更安全的 HSet 替代 HMSet，杜绝一切静默写入失败！
+					idStr := strconv.FormatInt(u.ID, 10)
+					profileMap := map[string]interface{}{
+						"ID":       idStr,
+						"id":       idStr,
+						"Username": u.Username,
+						"username": u.Username,
+						"HeadImg":  u.HeadImg,
+						"headImg":  u.HeadImg,
+					}
+
+					writePipe.HSet(bgCtx, redisKey, profileMap)
+					writePipe.Expire(bgCtx, redisKey, 24*time.Hour)
+				}
+				// 💡 捕捉并暴露底层写入错误！
+				_, execErr := writePipe.Exec(bgCtx)
+				if execErr != nil {
+					global.LogCtx(bgCtx).Errorw("❌ [Cache-Backfill] 严重：Redis底层拒绝写入！", "error", execErr)
+				} else {
+					global.LogCtx(bgCtx).Infof("🚀 [Cache-Backfill] 成功为 %d 名用户完成回填", len(dbUsers))
+				}
+			}(detachedCtx, pojoUsers)
+		}
 	}
 	return userCardMap, nil
 }

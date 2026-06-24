@@ -17,11 +17,19 @@ import (
 )
 
 type UserController struct {
-	userService service.UserService // 完全接入标准依赖接口，拒绝 Nil Panic 隐患
+	userService  service.UserService
+	likeService  service.LikeService
+	favorService service.FavorService
+	videoService service.VideoService
 }
 
-func NewUserController(us service.UserService) *UserController {
-	return &UserController{userService: us}
+func NewUserController(us service.UserService, ls service.LikeService, fs service.FavorService, vs service.VideoService) *UserController {
+	return &UserController{
+		userService:  us,
+		likeService:  ls,
+		favorService: fs,
+		videoService: vs,
+	}
 }
 
 func (api *UserController) Register(c *gin.Context) {
@@ -97,14 +105,30 @@ func (api *UserController) GetUserProfile(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+
+	// 1. 捞取静态资料（走 Redis 拦截）
 	userProfile, err := api.userService.GetUserProfileService(ctx, claims.Id, claims.UserName)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": err.Error()})
 		return
 	}
+
+	// =========================================================================
+	// 🎯【终极降维打击】：用一发内存读取，直接打包带回四大核心计数！
+	// =========================================================================
+	counters, err := api.likeService.GetUserAllCounters(ctx, claims.Id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "计数账本读取异常"})
+		return
+	}
+
+	// 2. 闪电组装，前端完全察觉不到背后的动静分离机制
+	userProfile.TotalLiked = counters["TotalLike"]
+	userProfile.FavoriteCount = counters["FavorCount"]
+	userProfile.WorkCount = counters["WorkCount"]
+
 	response.Success(c, userProfile)
 }
-
 func (api *UserController) UpdateUserInfo(c *gin.Context) {
 	claimInterface, exists := c.Get("claim")
 	if !exists {
@@ -173,10 +197,25 @@ func (api *UserController) GetPublicUserInfo(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
+
 	userProfile, err := api.userService.GetUserProfileService(ctx, targetId, "")
 	if err != nil {
 		response.Fail(c, response.ERROR, "该创作者可能已注销或隐藏了空间")
 		return
 	}
+
+	// =========================================================================
+	// 🎯【同理并网】：看别人的主页同样享受极致的 Redis 削峰红利
+	// =========================================================================
+	counters, err := api.likeService.GetUserAllCounters(ctx, targetId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": "计数账本读取异常"})
+		return
+	}
+
+	userProfile.TotalLiked = counters["TotalLike"]
+	userProfile.FavoriteCount = counters["FavorCount"]
+	userProfile.WorkCount = counters["WorkCount"]
+
 	response.Success(c, userProfile)
 }

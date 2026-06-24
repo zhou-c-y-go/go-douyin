@@ -24,6 +24,7 @@ func (api *LikeController) ToggleLike(c *gin.Context) {
 		TargetID   int64  `json:"target_id" binding:"required"`
 		TargetType string `json:"target_type" binding:"required"`
 		Status     int8   `json:"status" binding:"oneof=0 1"`
+		AuthorID   int64  `json:"author_id" binding:"oneof=0 1"`
 	}
 	if err := c.ShouldBindJSON(&req1); err != nil {
 		response.Fail(c, response.ERROR, "点赞包裹损坏，缺少关键单据")
@@ -31,30 +32,13 @@ func (api *LikeController) ToggleLike(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	isLiked, err := api.likeService.ToggleLikeService(ctx, userID, req1.TargetID, req1.TargetType, int(req1.Status))
+	isLiked, err := api.likeService.ToggleLikeService(ctx, userID, req1.TargetID, req1.AuthorID, req1.TargetType, int(req1.Status))
 	if err != nil {
 		response.Fail(c, response.ERROR, err.Error())
 		return
 	}
 
 	response.Success(c, gin.H{"is_liked": isLiked})
-}
-
-func (api *LikeController) GetUserTotalLikeCountController(c *gin.Context) {
-	claimInterface, exists := c.Get("claim")
-	if !exists {
-		response.Fail(c, response.ERROR, "未登录")
-		return
-	}
-	claims := claimInterface.(*req.CustomClaims)
-	userID := claims.Id
-
-	count, err := api.likeService.GetUserTotalLikeCount(c.Request.Context(), userID)
-	if err != nil {
-		response.Fail(c, response.ERROR, err.Error())
-		return
-	}
-	response.Success(c, count)
 }
 
 func (api *LikeController) CalibrateVideoCounts(c *gin.Context) {

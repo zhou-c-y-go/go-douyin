@@ -3,6 +3,7 @@ package api
 import (
 	"Go_Project/common/model/request"
 	"Go_Project/common/model/response"
+	"Go_Project/global"
 	"Go_Project/service"
 	"Go_Project/utils"
 	"github.com/gin-gonic/gin"
@@ -180,6 +181,7 @@ func (api *VideoController) GetUserVideoList(c *gin.Context) {
 	ctx := c.Request.Context()
 	videoVOs, err := api.videoService.GetUserVideoListService(ctx, targetUserID)
 	if err != nil {
+		global.LogCtx(ctx).Errorw("无法获取该创作者的作品集", "Error", err)
 		response.Fail(c, response.ERROR, "无法获取该创作者的作品集")
 		return
 	}
@@ -207,4 +209,58 @@ func (api *VideoController) GetVideoDetail(c *gin.Context) {
 		return
 	}
 	response.Success(c, videoVO)
+}
+
+func (api *VideoController) GetUserLikedVideoList(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil || targetUserID <= 0 {
+		response.Fail(c, response.ERROR, "非法的查阅用户对象")
+		return
+	}
+
+	// 🤫 探针微操：安全扒出当前正在看网页的登录用户 ID
+	var currentUserID int64 = 0
+	if claimInterface, exists := c.Get("claim"); exists {
+		if claims, ok := claimInterface.(*request.CustomClaims); ok {
+			currentUserID = claims.Id
+		}
+	}
+
+	ctx := c.Request.Context()
+	// 💡 并网投递：把被看的人（targetUserID）和正在看的人（currentUserID）一起塞进服务层
+	videoVOs, err := api.videoService.GetUserLikeVideoListService(ctx, targetUserID, currentUserID)
+	if err != nil {
+		response.Fail(c, response.ERROR, "无法获取该创作者的喜欢集")
+		return
+	}
+
+	response.Success(c, videoVOs)
+}
+
+func (api *VideoController) GetUserFavoriteVideoList(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	targetUserID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil || targetUserID <= 0 {
+		response.Fail(c, response.ERROR, "非法的查阅用户对象")
+		return
+	}
+
+	// 🤫 探针微操：从 JWT 中扒出当前正在看网页的登录用户 ID
+	var currentUserID int64 = 0
+	if claimInterface, exists := c.Get("claim"); exists {
+		if claims, ok := claimInterface.(*request.CustomClaims); ok {
+			currentUserID = claims.Id
+		}
+	}
+
+	ctx := c.Request.Context()
+	// 💡 并网投递：把被看的人（targetUserID）和正在看的人（currentUserID）一起塞进去
+	videoVOs, err := api.videoService.GetUserFavoriteVideoListService(ctx, targetUserID, currentUserID)
+	if err != nil {
+		response.Fail(c, response.ERROR, "无法获取该创作者的收藏集")
+		return
+	}
+
+	response.Success(c, videoVOs)
 }

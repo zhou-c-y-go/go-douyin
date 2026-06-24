@@ -5,6 +5,7 @@ import (
 	"Go_Project/global"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"strconv"
@@ -64,7 +65,10 @@ func (r *commentRepository) UpdateCommentPath(ctx context.Context, id int64, pat
 func (r *commentRepository) GetCommentsCache(ctx context.Context, videoID int64) ([]pojo.Comment, bool, error) {
 	commentListKey := fmt.Sprintf("Comment:List:%d", videoID)
 	cacheData, err := global.GVA_REDIS.Get(ctx, commentListKey).Result()
-	if err != nil || cacheData == "" {
+	if errors.Is(err, redis.Nil) {
+		return nil, false, nil
+	}
+	if err != nil {
 		return nil, false, err
 	}
 	var pojoComments []pojo.Comment
@@ -75,7 +79,7 @@ func (r *commentRepository) GetCommentsCache(ctx context.Context, videoID int64)
 func (r *commentRepository) SetCommentsCache(ctx context.Context, videoID int64, comments []pojo.Comment) error {
 	commentListKey := fmt.Sprintf("Comment:List:%d", videoID)
 	jsonData, _ := json.Marshal(comments)
-	return global.GVA_REDIS.Set(ctx, commentListKey, jsonData, time.Hour*24).Err()
+	return global.GVA_REDIS.Set(ctx, commentListKey, jsonData, time.Minute*5).Err()
 }
 
 func (r *commentRepository) DelCommentsCache(ctx context.Context, videoID int64) error {
@@ -91,6 +95,9 @@ func (r *commentRepository) GetLikedCommentMap(ctx context.Context, userID int64
 	if existErr == nil && exists > 0 {
 		likedIDsStr, _ := global.GVA_REDIS.SMembers(ctx, userLikeKey).Result()
 		for _, idStr := range likedIDsStr {
+			if idStr == "-1" {
+				continue
+			}
 			if id, parseErr := strconv.ParseInt(idStr, 10, 64); parseErr == nil {
 				likedCommentMap[id] = true
 			}
@@ -105,16 +112,19 @@ func (r *commentRepository) GetLikedCommentMap(ctx context.Context, userID int64
 	if err != nil {
 		return likedCommentMap, err
 	}
-
+	pipe := global.GVA_REDIS.Pipeline()
 	if len(likedIDs) > 0 {
 		interfaces := make([]interface{}, len(likedIDs))
 		for i, id := range likedIDs {
 			interfaces[i] = id
 			likedCommentMap[id] = true
 		}
-		global.GVA_REDIS.SAdd(ctx, userLikeKey, interfaces...)
-		global.GVA_REDIS.Expire(ctx, userLikeKey, 24*time.Hour)
+		pipe.SAdd(ctx, userLikeKey, interfaces...)
+	} else {
+		pipe.SAdd(ctx, userLikeKey, -1)
 	}
+	pipe.Expire(ctx, userLikeKey, 24*time.Hour)
+	_, _ = pipe.Exec(ctx)
 	return likedCommentMap, nil
 }
 

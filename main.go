@@ -2,6 +2,7 @@ package main
 
 import (
 	"Go_Project/Init"
+	"Go_Project/common/repository"
 	"Go_Project/core"
 	"Go_Project/global"
 	"Go_Project/logger"
@@ -28,6 +29,11 @@ func main() {
 	// 初始化数据库配置
 	global.GVA_DB = Init.InitDatabaseFactory()
 	Init.RegisterAutoMigrateTable(global.GVA_DB)
+	//
+	likeRepo := repository.NewLikeRepository()
+	favoriteRepo := repository.NewFavoriteRepository()
+	go likeRepo.StartLikeFlushWorker(context.Background())
+	go favoriteRepo.StartFavoriteFlushWorker(context.Background())
 	// 初始化redis缓存
 	Init.Redis()
 	// 等待 Docker Kafka 就绪

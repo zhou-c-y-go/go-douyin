@@ -18,9 +18,6 @@ type User struct {
 	Authority       string    `json:"authority" gorm:"default:user;comment:用户角色"`
 	BackgroundImage string    `json:"background_image"` // 个人主页背景图
 	Signature       string    `json:"signature"`        // 个人简介
-	TotalFavorited  int64     `json:"total_favorited"`  // 获赞数量
-	WorkCount       int64     `json:"work_count"`       // 作品数量
-	FavoriteCount   int64     `json:"favorite_count"`   // 点赞数量
 	Gender          string    `json:"gender" gorm:"column:gender;comment:角色"`
 }
 

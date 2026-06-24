@@ -13,11 +13,13 @@ type VideoRepository interface {
 	CreateVideo(ctx context.Context, video *pojo.Video) error
 	GetVideosForFeed(ctx context.Context, latestTime time.Time, limit int) ([]pojo.Video, error)
 	GetVideosByAuthorID(ctx context.Context, authorID int64) ([]pojo.Video, error)
+	GetVideoByIDList(ctx context.Context, ids []int64) ([]pojo.Video, error)
 	GetVideoByID(ctx context.Context, id int64) (*pojo.Video, error)
 	UpdateDuration(ctx context.Context, videoID int64, duration int64) error
 
 	// 社交关联透传查询
 	BatchGetLikedVideoIDs(ctx context.Context, userID int64, videoIDs []int64) ([]int64, error)
+	BatchGetFavoriteVideoIDs(ctx context.Context, userID int64, videoIDs []int64) ([]int64, error)
 	CheckLikeRecordExists(ctx context.Context, userID, videoID int64) (bool, error)
 	CheckFavoriteRecordExists(ctx context.Context, userID, videoID int64) (bool, error)
 
@@ -42,6 +44,9 @@ type VideoRepository interface {
 	ExistsFavoriteSetCache(ctx context.Context, videoID int64) (int64, error)
 	IsMemberFavoriteSetCache(ctx context.Context, videoID int64, userID int64) (bool, error)
 	AddFavoriteSetCache(ctx context.Context, videoID int64, userID int64, ttl time.Duration) error
+	GetVideoCountByAuthorID(ctx context.Context, authorID int64) (int64, error)
+	GetVideoCountCache(ctx context.Context, authorID int64) (int64, bool, error)
+	SetVideoCountCache(ctx context.Context, authorID int64, count int64) error
 }
 
 type videoRepository struct{}
@@ -65,7 +70,11 @@ func (r *videoRepository) GetVideosByAuthorID(ctx context.Context, authorID int6
 	err := global.GVA_DB.WithContext(ctx).Where("author_id = ?", authorID).Order("created_at DESC").Find(&videos).Error
 	return videos, err
 }
-
+func (r *videoRepository) GetVideoByIDList(ctx context.Context, ids []int64) ([]pojo.Video, error) {
+	var videos []pojo.Video
+	err := global.GVA_DB.WithContext(ctx).Where("id in (?)", ids).Find(&videos).Error
+	return videos, err
+}
 func (r *videoRepository) GetVideoByID(ctx context.Context, id int64) (*pojo.Video, error) {
 	var video pojo.Video
 	err := global.GVA_DB.WithContext(ctx).Where("id = ?", id).First(&video).Error
@@ -86,7 +95,13 @@ func (r *videoRepository) BatchGetLikedVideoIDs(ctx context.Context, userID int6
 		Pluck("target_id", &likedIDs).Error
 	return likedIDs, err
 }
-
+func (r *videoRepository) BatchGetFavoriteVideoIDs(ctx context.Context, userID int64, videoIDs []int64) ([]int64, error) {
+	var FavoriteIDs []int64
+	err := global.GVA_DB.WithContext(ctx).Model(&pojo.FavoriteRecord{}).
+		Where("user_id = ? AND target_type = ? AND target_id IN ? AND status = 1", userID, "video", videoIDs).
+		Pluck("target_id", &FavoriteIDs).Error
+	return FavoriteIDs, err
+}
 func (r *videoRepository) CheckLikeRecordExists(ctx context.Context, userID, videoID int64) (bool, error) {
 	var count int64
 	err := global.GVA_DB.WithContext(ctx).Model(&pojo.LikeRecord{}).
@@ -179,4 +194,27 @@ func (r *videoRepository) AddFavoriteSetCache(ctx context.Context, videoID int64
 		return err
 	}
 	return global.GVA_REDIS.Expire(ctx, key, ttl).Err()
+}
+
+func (r *videoRepository) GetVideoCountByAuthorID(ctx context.Context, authorID int64) (int64, error) {
+	var count int64
+	// 极致性能：COUNT(*) 走覆盖索引，速度极快
+	err := global.GVA_DB.WithContext(ctx).Model(&pojo.Video{}).
+		Where("author_id = ?", authorID).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *videoRepository) GetVideoCountCache(ctx context.Context, authorID int64) (int64, bool, error) {
+	key := fmt.Sprintf("Video:Count:author:%d", authorID)
+	val, err := global.GVA_REDIS.Get(ctx, key).Int64()
+	if err != nil {
+		return 0, false, err
+	}
+	return val, true, nil
+}
+
+func (r *videoRepository) SetVideoCountCache(ctx context.Context, authorID int64, count int64) error {
+	key := fmt.Sprintf("Video:Count:author:%d", authorID)
+	return global.GVA_REDIS.Set(ctx, key, count, 24*time.Hour).Err() // 给予 24 小时热度寿命
 }

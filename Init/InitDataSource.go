@@ -75,6 +75,7 @@ func RegisterAutoMigrateTable(db *gorm.DB) {
 		&pojo.Comment{},
 		&pojo.LikeRecord{},
 		&pojo.FavoriteRecord{},
+		&pojo.FollowRelation{},
 	)
 	if err != nil {
 		panic(fmt.Sprintf("❌ [DB-Migrate-Fatal] 自动刷表进化失败: %v", err))
